@@ -156,9 +156,7 @@ async function startBot() {
         setupMenu(sock)
         panel("Menunggu QR...", "Belum Login")
 
-        // ───────────────────────────────
         // CONNECTION EVENTS
-        // ───────────────────────────────
         sock.ev.on("connection.update", async (update) => {
             const { qr, connection, lastDisconnect } = update
 
