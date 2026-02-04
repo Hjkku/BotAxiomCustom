@@ -8,9 +8,7 @@ const Pino = require("pino")
 const readline = require("readline")
 const fs = require("fs")
 
-// ──────────────────────────────────────────────
 // GLOBAL STATE
-// ──────────────────────────────────────────────
 let startTime = Date.now()
 let msgCount = 0
 let errCount = 0
@@ -19,9 +17,7 @@ let lastCPU = 0
 let reconnecting = false
 global.sock = null
 
-// ──────────────────────────────────────────────
 // CPU USAGE LIGHT
-// ──────────────────────────────────────────────
 let lastCPUTime = process.cpuUsage()
 setInterval(() => {
     const now = process.cpuUsage()
@@ -29,9 +25,7 @@ setInterval(() => {
     lastCPUTime = now
 }, 1000)
 
-// ──────────────────────────────────────────────
 // HELPERS
-// ──────────────────────────────────────────────
 function formatUptime(ms) {
     let s = Math.floor(ms / 1000)
     let m = Math.floor(s / 60)
@@ -49,9 +43,7 @@ function green(t) { return `\x1b[32m${t}\x1b[0m` }
 function red(t) { return `\x1b[31m${t}\x1b[0m` }
 function yellow(t) { return `\x1b[33m${t}\x1b[0m` }
 
-// ──────────────────────────────────────────────
 // PANEL
-// ──────────────────────────────────────────────
 function panel(status, device, ping = "-", showSource = false) {
     console.clear()
     console.log(`
@@ -88,9 +80,7 @@ ${showSource ? `
 `)
 }
 
-// ──────────────────────────────────────────────
 // TERMINAL MENU
-// ──────────────────────────────────────────────
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
@@ -129,9 +119,7 @@ function setupMenu(sock) {
     })
 }
 
-// ──────────────────────────────────────────────
 // INTERNAL RESTART SAFE
-// ──────────────────────────────────────────────
 function restartBot() {
     startTime = Date.now()
     msgCount = 0
@@ -147,9 +135,7 @@ function restartBot() {
     startBot()
 }
 
-// ──────────────────────────────────────────────
 // START BOT
-// ──────────────────────────────────────────────
 async function startBot() {
     try {
         if (global.sock) {
