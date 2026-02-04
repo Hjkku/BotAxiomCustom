@@ -194,9 +194,7 @@ async function startBot() {
 
         sock.ev.on("creds.update", saveCreds)
 
-        // ───────────────────────────────
         // PESAN MASUK
-        // ───────────────────────────────
         sock.ev.on("messages.upsert", async ({ messages }) => {
             const msg = messages[0]
             if (!msg.message) return
@@ -221,9 +219,7 @@ async function startBot() {
             }
         })
 
-        // ───────────────────────────────
         // ANTI-CRASH
-        // ───────────────────────────────
         process.on("uncaughtException", (err) => {
             errCount++
             lastLog = red("Error: " + err.message)
