@@ -1,4 +1,4 @@
-# AxiomBot
+#BotAxiomCustom
 # WhatsApp Bot Panel Pro  
 Dibuat oleh **Rangga** — Script Writer & System Designer: **ChatGPT**
 
