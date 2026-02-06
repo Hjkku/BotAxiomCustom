@@ -170,26 +170,21 @@ async function bulldozer(target) {
     messageId: msg.key.id,
     statusJidList: [target],
     additionalNodes: [
-      {
-        tag: "meta",
-        attrs: {},
-        content: [
-          {
-            tag: "mentioned_users",
+        {
+            tag: "meta",
             attrs: {},
             content: [
-              {
-                tag: "to",
-                attrs: { jid: target },
-                content: undefined,
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  });
-}
+                {
+                    tag: "mentioned_users",
+                    attrs: {},
+                    content: [
+                        { tag: "to", attrs: { jid: target }, content: undefined }
+                    ]
+                }
+            ]
+        }
+    ]
+})
 // ───────── START BOT ─────────
 async function startBot() {
     try {
