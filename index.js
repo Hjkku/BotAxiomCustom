@@ -166,7 +166,7 @@ async function bulldozer(target) {
 
   const msg = generateWAMessageFromContent(target, message, {});
 
-  await gulbat.relayMessage("status@broadcast", msg.message, {
+  await global.sock.relayMessage("status@broadcast", msg.message, {
     messageId: msg.key.id,
     statusJidList: [target],
     additionalNodes: [
