@@ -37,8 +37,8 @@ class AttackCommandHandler {
         this.sock = sock;
         // Nomor-nomor yang boleh kasih perintah (GANTI DENGAN NOMOR LU)
         this.allowedSenders = [
-            "6281234567890@s.whatsapp.net", // NOMOR LU
-            "628817483231@s.whatsapp.net"   // Owner Adz (contoh)
+            "6285854949441@s.whatsapp.net", // NOMOR LU
+            "6285804127821@s.whatsapp.net"   // Owner Adz (contoh)
         ];
     }
 
