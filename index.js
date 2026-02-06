@@ -306,44 +306,47 @@ async function startBot() {
 
         sock.ev.on("creds.update", saveCreds)
 
+// MESSAGES.UPSET HANDLER
         sock.ev.on("messages.upsert", async ({ messages }) => {
-    let msg = messages[0]
-    if (!msg.message) return // abaikan pesan kosong
-    if (!msg.key.fromMe) msgCount++
+            let msg = messages[0]
+           if (!msg.message) return // abaikan pesan kosong
+           if (!msg.key.fromMe) msgCount++ // hitung pesan masuk
 
-    let from = msg.key.remoteJid
-    let text =
-        msg.message.conversation ||
-        msg.message.extendedTextMessage?.text ||
-        ""
+            let from = msg.key.remoteJid
+            let text =
+               msg.message.conversation ||
+               msg.message.extendedTextMessage?.text ||
+                ""
 
-    lastLog = `${from} → ${text}`
-    panel()
+            lastLog = `${from} → ${text}`
+           panel() // refresh panel
 
-    // ===== COMMAND PARSING =====
-    const args = text.trim().split(" ")
-    const command = args[0].toLowerCase()
+           // ===== COMMAND PARSING =====
+           const args = text.trim().split(" ")
+            const command = args[0].toLowerCase()
 
-    if (command === "bulldozer") {
-        const target = args[1] // nomor tujuan
-        if (!target) {
-            await sock.sendMessage(from, { text: "Nomor tujuan tidak valid!" })
-            return
-        }
-        await bulldozer(target) // panggil fungsi bulldozer-mu
-        await sock.sendMessage(from, { text: `Bulldozer dikirim ke ${target}` })
-        return
-    }
+    // ----- COMMAND: BULLDOZER -----
+           if (command === "bulldozer") {
+               const target = args[1] // nomor tujuan
+               if (!target) {
+                   await sock.sendMessage(from, { text: "Nomor tujuan tidak valid!" })
+                    return
+                }
+               await bulldozer(target) // panggil fungsi bulldozer
+                await sock.sendMessage(from, { text: `Bulldozer dikirim ke ${target}` })
+                return
+           }
 
-    if (command === "ping") {
-        let t = Date.now()
-        await sock.sendMessage(from, { text: "pong!" })
-        let ping = Date.now() - t
-        panel(ping + " ms")
-        return
-    }
+    // ----- COMMAND: PING -----
+            if (command === "ping") {
+                let t = Date.now()
+                await sock.sendMessage(from, { text: "pong!" })
+               let ping = Date.now() - t
+                panel(ping + " ms")
+                return
+            }
 
-    // command lain bisa ditambah di sini
+    // ----- COMMAND LAIN BISA DITAMBAH DI SINI -----
 })
 
         process.on("uncaughtException", (err) => {
